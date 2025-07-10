@@ -1,20 +1,11 @@
 {
-  "name": "urbanfix-mern-app",
-  "version": "1.0.0",
-  "description": "MERN stack mobile app with React Native",
-  "main": "index.js",
-  "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd backend && npm run dev",
-    "client": "cd frontend && npm start",
-    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "build": "cd backend && npm run build",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": ["mern", "react-native", "mobile", "express", "mongodb"],
-  "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "mongodb": "^6.17.0",
+    "mongoose": "^8.16.2",
+    "morgan": "^1.10.0"
   }
-} 
+}
