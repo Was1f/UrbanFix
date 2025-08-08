@@ -7,6 +7,19 @@ const DiscussionSchema = new mongoose.Schema({
   author: { type: String, default: "Anonymous" },
   time: { type: String, default: "Just now" },
   image: { type: String }, // optional
+  status: { 
+    type: String, 
+    default: 'active',
+    enum: ['active', 'flagged', 'removed', 'pending_review']
+  },
+  isFlagged: { 
+    type: Boolean, 
+    default: false 
+  },
+  flagCount: { 
+    type: Number, 
+    default: 0 
+  }
 }, {
   timestamps: true
 });
