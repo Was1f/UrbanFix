@@ -5,8 +5,10 @@ const DiscussionSchema = new mongoose.Schema({
   description: { type: String },
   type: { type: String, required: true },
   author: { type: String, default: "Anonymous" },
-  time: { type: String, default: "Just now" },
-  image: { type: String }, // optional
+  location: { type: String, required: true }, // Added location field
+  image: { type: String }, // URL to uploaded image
+  audio: { type: String }, // URL to uploaded audio
+  createdAt: { type: Date, default: Date.now },
 }, {
   timestamps: true
 });
