@@ -7,8 +7,8 @@ const SESSION_KEYS = {
   SESSION_TIMESTAMP: 'session_timestamp',
 };
 
-const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-
+const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; 
+// const SESSION_TIMEOUT = 5 * 1000; //5 seconds
 class SessionManager {
   // Store admin session data
   static async storeAdminSession(token, username, role) {
