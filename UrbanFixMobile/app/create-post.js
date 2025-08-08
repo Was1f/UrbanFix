@@ -31,7 +31,7 @@ export default function CreatePost() {
     };
 
     try {
-      const response = await fetch('http://192.168.56.1:5000/api/discussions', {
+      const response = await fetch('http://192.168.10.115:5000/api/discussions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 
 import { useRouter } from 'expo-router';
@@ -25,10 +26,10 @@ const CommunityHome = () => {
     const fetchData = async () => {
       try {
         // Replace these URLs with your actual backend endpoints
-        const boardsRes = await fetch('http://192.168.56.1:5000/api/boards');
+        const boardsRes = await fetch('http://192.168.10.115:5000/api/boards');
         const boardsData = await boardsRes.json();
 
-        const discussionsRes = await fetch('http://192.168.56.1:5000/api/discussions');
+        const discussionsRes = await fetch('http://192.168.10.115:5000/api/discussions');
         const discussionsData = await discussionsRes.json();
 
         setBoards(boardsData);
@@ -42,6 +43,32 @@ const CommunityHome = () => {
 
     fetchData();
   }, []);
+
+  const handleReport = async (discussionId, title) => {
+    try {
+      const response = await fetch('http://192.168.10.115:5000/api/moderation/user/report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          discussionId,
+          reason: 'Inappropriate Content',
+          reporterUsername: 'Anonymous'
+        }),
+      });
+
+      if (response.ok) {
+        Alert.alert('Success', 'Report submitted successfully');
+      } else {
+        const errorData = await response.json();
+        Alert.alert('Error', errorData.message || 'Failed to submit report');
+      }
+    } catch (error) {
+      console.error('Error reporting:', error);
+      Alert.alert('Error', 'Failed to submit report');
+    }
+  };
 
   if (loading) {
     return (
@@ -61,7 +88,15 @@ const CommunityHome = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.heading}>Explore Boards</Text>
+      <View style={styles.header}>
+        <Text style={styles.heading}>Explore Boards</Text>
+        <TouchableOpacity 
+          style={styles.adminButton} 
+          onPress={() => router.push('/admin-login')}
+        >
+          <Text style={styles.adminButtonText}>Admin</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.tags}>
         <Text style={styles.tag}>Nearby</Text>
@@ -102,6 +137,12 @@ const CommunityHome = () => {
             <Text style={styles.discussionAuthor}>
               By {d.author}, {d.time}
             </Text>
+            <TouchableOpacity 
+              style={styles.reportButton}
+              onPress={() => handleReport(d._id, d.title)}
+            >
+              <Text style={styles.reportButtonText}>Report</Text>
+            </TouchableOpacity>
           </View>
         </View>
       ))}
@@ -118,12 +159,29 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#f9f9f9',
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   heading: {
     fontSize: 22,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 10,
     color: '#4b4b4b',
+  },
+  adminButton: {
+    backgroundColor: '#1e90ff',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  adminButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   tags: {
     flexDirection: 'row',
@@ -209,6 +267,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginTop: 4,
+  },
+  reportButton: {
+    backgroundColor: '#ffefef',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  reportButtonText: {
+    color: '#c00',
+    fontSize: 13,
+    fontWeight: '600',
   },
   fab: {
     backgroundColor: '#1e90ff',
