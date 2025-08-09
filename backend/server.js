@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const os = require('os');
 
 dotenv.config();
 
@@ -23,17 +24,32 @@ app.use('/api/moderation', moderationRoutes);
 
 const PORT = process.env.PORT || 5000;
 
+function getLocalExternalIPv4() {
+  const interfaces = os.networkInterfaces();
+  for (const interfaceName of Object.keys(interfaces)) {
+    for (const net of interfaces[interfaceName] || []) {
+      if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return null;
+}
+
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
 .then(() => {
   console.log('MongoDB Connected');
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Server accessible at:`);
     console.log(`  - Local: http://localhost:${PORT}`);
-    console.log(`  - Network: http://192.168.10.115:${PORT}`);
+    const lanIp = getLocalExternalIPv4();
+    if (lanIp) {
+      console.log(`  - Network: http://${lanIp}:${PORT}`);
+    }
   });
 })
 .catch(err => console.error(err));
