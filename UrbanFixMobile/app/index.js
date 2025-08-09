@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { useRouter } from 'expo-router';
+import { apiUrl } from '../constants/api';
 
 const CommunityHome = () => {
   const router = useRouter();
@@ -26,10 +27,10 @@ const CommunityHome = () => {
     const fetchData = async () => {
       try {
         // Replace these URLs with your actual backend endpoints
-        const boardsRes = await fetch('http://192.168.10.115:5000/api/boards');
+        const boardsRes = await fetch(apiUrl('/api/boards'));
         const boardsData = await boardsRes.json();
 
-        const discussionsRes = await fetch('http://192.168.10.115:5000/api/discussions');
+        const discussionsRes = await fetch(apiUrl('/api/discussions'));
         const discussionsData = await discussionsRes.json();
 
         setBoards(boardsData);
@@ -46,7 +47,7 @@ const CommunityHome = () => {
 
   const handleReport = async (discussionId, title) => {
     try {
-      const response = await fetch('http://192.168.10.115:5000/api/moderation/user/report', {
+      const response = await fetch(apiUrl('/api/moderation/user/report'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

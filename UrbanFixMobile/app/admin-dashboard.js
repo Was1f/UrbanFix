@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import SessionManager from '../utils/sessionManager';
 import ProtectedRoute from '../components/ProtectedRoute';
+import { apiUrl } from '../constants/api';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -51,7 +52,7 @@ export default function AdminDashboard() {
       }
 
       // Fetch moderation stats
-      const statsResponse = await fetch('http://192.168.10.115:5000/api/moderation/admin/stats', {
+      const statsResponse = await fetch(apiUrl('/api/moderation/admin/stats'), {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
@@ -59,7 +60,7 @@ export default function AdminDashboard() {
       });
 
       // Fetch recent reports
-      const reportsResponse = await fetch('http://192.168.10.115:5000/api/moderation/admin/reports?limit=5', {
+      const reportsResponse = await fetch(apiUrl('/api/moderation/admin/reports?limit=5'), {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',

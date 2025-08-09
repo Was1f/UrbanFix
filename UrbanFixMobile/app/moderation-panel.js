@@ -12,6 +12,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import SessionManager from '../utils/sessionManager';
 import ProtectedRoute from '../components/ProtectedRoute';
+import { apiUrl } from '../constants/api';
 
 export default function ModerationPanel() {
   const router = useRouter();
@@ -55,7 +56,7 @@ export default function ModerationPanel() {
 
   const fetchReports = async (authToken) => {
     try {
-      const response = await fetch(`http://192.168.10.115:5000/api/moderation/admin/reports?status=${selectedStatus}`, {
+      const response = await fetch(apiUrl(`/api/moderation/admin/reports?status=${selectedStatus}`), {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ export default function ModerationPanel() {
         return;
       }
 
-      const response = await fetch(`http://192.168.10.115:5000/api/moderation/admin/reports/${reportId}/action`, {
+      const response = await fetch(apiUrl(`/api/moderation/admin/reports/${reportId}/action`), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.token}`,

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import SessionManager from '../utils/sessionManager';
+import { apiUrl } from '../constants/api';
 
 export default function AdminLogin() {
   const router = useRouter();
@@ -56,7 +57,7 @@ export default function AdminLogin() {
     try {
       console.log('🔍 Attempting login with:', { username, password });
       
-      const response = await fetch('http://192.168.10.115:5000/api/admin/login', {
+      const response = await fetch(apiUrl('/api/admin/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
