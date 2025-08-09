@@ -21,6 +21,7 @@ const locations = [
   "Dhanmondi", "Banani", "Gulshan", "Mohakhali", "Uttara", 
   "Mirpur", "Wari", "Old Dhaka", "Tejgaon", "Ramna"
 ];
+import { apiUrl } from '../constants/api';
 
 export default function CreatePost() {
   const router = useRouter();
@@ -90,28 +91,17 @@ export default function CreatePost() {
       return;
     }
 
-    if (!location) {
-      Alert.alert("Validation Error", "Please select a location");
-      return;
-    }
+    const postData = {
+      title,
+      description,
+      type,
+      author: 'Anonymous', // Replace with actual user if using auth
+      time: 'Just now',
+    };
 
     try {
-      // Upload files first if any
-      const uploadedFiles = await uploadFiles();
-
-      // Create discussion
-      const discussionData = {
-        title: title.trim(),
-        description: description.trim(),
-        type,
-        location,
-        author: "Anonymous",
-        image: uploadedFiles.image || null,
-        audio: uploadedFiles.audio || null,
-      };
-
-      const response = await fetch("http://192.168.56.1:5000/api/discussions", {
-        method: "POST",
+      const response = await fetch(apiUrl('/api/discussions'), {
+        method: 'POST',
         headers: {
           "Content-Type": "application/json",
         },

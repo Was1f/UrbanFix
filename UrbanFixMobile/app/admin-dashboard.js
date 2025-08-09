@@ -9,9 +9,9 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-// import SessionManager from '../utils/sessionManager';
-// import ProtectedRoute from '../components/ProtectedRoute';
-// import { apiUrl } from '../constants/api';
+import SessionManager from '../utils/sessionManager';
+import ProtectedRoute from '../components/ProtectedRoute';
+import { apiUrl } from '../constants/api';
 
 export default function AdminDashboard() {
   const router = useRouter();

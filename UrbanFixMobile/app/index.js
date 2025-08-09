@@ -11,7 +11,11 @@ import {
   Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
+  Alert,
+} from 'react-native';
 
+import { useRouter } from 'expo-router';
+import { apiUrl } from '../constants/api';
 const { width } = Dimensions.get("window");
 
 const CommunityHome = () => {
@@ -24,12 +28,11 @@ const CommunityHome = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const boardsRes = await fetch("http://192.168.56.1:5000/api/boards");
+        // Replace these URLs with your actual backend endpoints
+        const boardsRes = await fetch(apiUrl('/api/boards'));
         const boardsData = await boardsRes.json();
-        
-        const discussionsRes = await fetch(
-          "http://192.168.56.1:5000/api/discussions"
-        );
+
+        const discussionsRes = await fetch(apiUrl('/api/discussions'));
         const discussionsData = await discussionsRes.json();
         
         setBoards(boardsData);
@@ -49,45 +52,29 @@ const CommunityHome = () => {
     return unsubscribe;
   }, []);
 
-  const handleBoardPress = (board) => {
-    // Navigate to discussions filtered by location
-    router.push(`/discussions?location=${board.title}`);
-  };
-
-  const formatTimeAgo = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInMinutes = Math.floor((now - date) / (1000 * 60));
-    
-    if (diffInMinutes < 1) return "Just now";
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-    return `${Math.floor(diffInMinutes / 1440)}d ago`;
-  };
-
-  const retryFetch = () => {
-    setLoading(true);
-    setError(null);
-    fetchData();
-  };
-
-  const fetchData = async () => {
+  const handleReport = async (discussionId, title) => {
     try {
-      const boardsRes = await fetch("http://192.168.56.1:5000/api/boards");
-      const boardsData = await boardsRes.json();
-      
-      const discussionsRes = await fetch(
-        "http://192.168.56.1:5000/api/discussions"
-      );
-      const discussionsData = await discussionsRes.json();
-      
-      setBoards(boardsData);
-      setDiscussions(discussionsData);
-    } catch (err) {
-      console.error("Fetch error:", err);
-      setError("Failed to load data");
-    } finally {
-      setLoading(false);
+      const response = await fetch(apiUrl('/api/moderation/user/report'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          discussionId,
+          reason: 'Inappropriate Content',
+          reporterUsername: 'Anonymous'
+        }),
+      });
+
+      if (response.ok) {
+        Alert.alert('Success', 'Report submitted successfully');
+      } else {
+        const errorData = await response.json();
+        Alert.alert('Error', errorData.message || 'Failed to submit report');
+      }
+    } catch (error) {
+      console.error('Error reporting:', error);
+      Alert.alert('Error', 'Failed to submit report');
     }
   };
 
@@ -115,9 +102,16 @@ const CommunityHome = () => {
   }
 
   return (
-    <View style={styles.page}>
-      {/* Header */}
-      <Text style={styles.header}>UrbanFix Community</Text>
+    <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.heading}>Explore Boards</Text>
+        <TouchableOpacity 
+          style={styles.adminButton} 
+          onPress={() => router.push('/admin-login')}
+        >
+          <Text style={styles.adminButtonText}>Admin</Text>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
         contentContainerStyle={{ paddingBottom: 100 }}
@@ -431,6 +425,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#999",
     textAlign: "center",
+  },
+  reportButton: {
+    backgroundColor: '#ffefef',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  reportButtonText: {
+    color: '#c00',
+    fontSize: 13,
+    fontWeight: '600',
   },
   fab: {
     position: "absolute",

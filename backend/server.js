@@ -52,9 +52,13 @@ const upload = multer({
 // Routes
 const boardRoutes = require('./routes/boards');
 const discussionRoutes = require('./routes/discussions');
+const adminRoutes = require('./routes/admin');
+const moderationRoutes = require('./routes/moderation');
 
 app.use('/api/boards', boardRoutes);
 app.use('/api/discussions', discussionRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/moderation', moderationRoutes);
 
 // File upload endpoint
 app.post('/api/upload', upload.fields([
