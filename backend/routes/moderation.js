@@ -111,9 +111,11 @@ router.post('/admin/reports/:id/action', authenticateToken, async (req, res) => 
         break;
       case 'rejected':
         discussion.status = 'active';
+        discussion.isFlagged = false;
         break;
       case 'removed':
         discussion.status = 'removed';
+        discussion.isFlagged = false;
         break;
       case 'resolved':
         discussion.status = 'active';
@@ -179,14 +181,15 @@ router.post('/user/report', async (req, res) => {
       return res.status(404).json({ message: 'Discussion not found' });
     }
 
-    // Check if already reported
+    // Check if already reported and still pending
     const existingReport = await Report.findOne({ 
       discussionId, 
-      status: { $in: ['pending', 'approved'] } 
+      status: 'pending'
     });
 
+    // If a pending report exists, treat as idempotent and return OK with the existing report
     if (existingReport) {
-      return res.status(400).json({ message: 'Discussion already reported' });
+      return res.status(200).json({ message: 'Report already pending review', report: existingReport });
     }
 
     // Create new report
@@ -212,6 +215,47 @@ router.post('/user/report', async (req, res) => {
   } catch (error) {
     console.error('Error creating report:', error);
     res.status(500).json({ message: 'Error creating report' });
+  }
+});
+
+// Revoke a pending report for a discussion (PUBLIC ROUTE)
+router.post('/user/report/revoke', async (req, res) => {
+  try {
+    const { discussionId } = req.body;
+
+    if (!discussionId) {
+      return res.status(400).json({ message: 'Discussion ID is required' });
+    }
+
+    const discussion = await Discussion.findById(discussionId);
+    if (!discussion) {
+      return res.status(404).json({ message: 'Discussion not found' });
+    }
+
+    const pendingReport = await Report.findOne({ discussionId, status: 'pending' });
+
+    if (!pendingReport) {
+      return res.status(404).json({ message: 'No pending report to revoke' });
+    }
+
+    // Delete the pending report
+    await Report.deleteOne({ _id: pendingReport._id });
+
+    // Update discussion flags
+    const newFlagCount = Math.max(0, (discussion.flagCount || 0) - 1);
+    discussion.flagCount = newFlagCount;
+    if (newFlagCount === 0) {
+      discussion.isFlagged = false;
+      if (discussion.status === 'flagged') {
+        discussion.status = 'active';
+      }
+    }
+    await discussion.save();
+
+    return res.status(200).json({ message: 'Report revoked successfully' });
+  } catch (error) {
+    console.error('Error revoking report:', error);
+    res.status(500).json({ message: 'Error revoking report' });
   }
 });
 

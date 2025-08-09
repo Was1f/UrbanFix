@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import SessionManager from '../utils/sessionManager';
 import ProtectedRoute from '../components/ProtectedRoute';
 import { apiUrl } from '../constants/api';
@@ -91,6 +92,14 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (session?.token) {
+        fetchDashboardData(session.token);
+      }
+    }, [session?.token])
+  );
 
   const handleSessionExpired = async () => {
     console.log('⚠️ Session expired, clearing and redirecting');
