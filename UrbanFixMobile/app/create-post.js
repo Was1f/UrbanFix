@@ -17,18 +17,11 @@ export default function CreatePost() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState('Report');
 
-  const handleSubmit = async () => {
     if (!title.trim()) {
       Alert.alert('Validation Error', 'Title cannot be empty');
-      return;
     }
 
-    const postData = {
-      title,
-      description,
       type,
-      author: 'Anonymous', // Replace with actual user if using auth
-      time: 'Just now',
     };
 
     try {

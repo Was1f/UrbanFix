@@ -24,4 +24,3 @@ const DiscussionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('Discussion', DiscussionSchema);

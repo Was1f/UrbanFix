@@ -29,15 +29,27 @@ const CommunityHome = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const boardsRes = await fetch(apiUrl('/api/boards'));
-      const boardsData = await boardsRes.json();
+      setLoading(true);
+      
+      // Fetch boards and discussions concurrently
+      const [boardsRes, discussionsRes] = await Promise.all([
+        fetch(apiUrl('/api/boards')),
+        fetch(apiUrl('/api/discussions'))
+      ]);
 
-      const discussionsRes = await fetch(apiUrl('/api/discussions'));
-      const discussionsData = await discussionsRes.json();
+      if (!boardsRes.ok || !discussionsRes.ok) {
+        throw new Error('Failed to fetch data');
+      }
+
+      const [boardsData, discussionsData] = await Promise.all([
+        boardsRes.json(),
+        discussionsRes.json()
+      ]);
 
       setBoards(boardsData);
       setDiscussions(discussionsData);
 
+      // Map reported discussions
       const nextReported = {};
       discussionsData.forEach((disc) => {
         if (disc?.status === 'flagged') {
@@ -45,6 +57,8 @@ const CommunityHome = () => {
         }
       });
       setReportedMap(nextReported);
+      
+      setError(null);
     } catch (err) {
       console.error('Fetch error:', err);
       setError('Failed to load data');
@@ -64,7 +78,18 @@ const CommunityHome = () => {
   );
 
   const handleBoardPress = (board) => {
-    router.push(`/discussions?location=${encodeURIComponent(board.title)}`);
+    if (board.posts === 0) {
+      Alert.alert(
+        'No Posts Yet', 
+        `There are no posts in ${board.title} yet. Be the first to create one!`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Post', onPress: () => router.push('/create-post') }
+        ]
+      );
+      return;
+    }
+    router.push(`/discussionspage?location=${encodeURIComponent(board.title)}`);
   };
 
   const formatTimeAgo = (dateString) => {
@@ -79,7 +104,6 @@ const CommunityHome = () => {
   };
 
   const retryFetch = () => {
-    setLoading(true);
     setError(null);
     fetchData();
   };
@@ -142,7 +166,7 @@ const CommunityHome = () => {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#1e90ff" />
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Text style={styles.loadingText}>Loading community...</Text>
       </View>
     );
   }
@@ -199,25 +223,49 @@ const CommunityHome = () => {
           keyExtractor={(item, index) => item._id || index.toString()}
           renderItem={({ item }) => (
             <Pressable
-              style={({ pressed }) => [styles.boardCard, pressed && { transform: [{ scale: 0.97 }] }]}
+              style={({ pressed }) => [
+                styles.boardCard, 
+                pressed && { transform: [{ scale: 0.97 }] },
+                item.posts === 0 && styles.emptyBoardCard
+              ]}
               onPress={() => handleBoardPress(item)}
             >
               <View style={styles.boardImageContainer}>
                 {item.image ? (
                   <Image source={{ uri: item.image }} style={styles.boardImage} />
                 ) : (
-                  <View style={[styles.boardImage, styles.placeholderImage]}>
-                    <Text style={styles.placeholderText}>{(item.title || 'U').charAt(0)}</Text>
+                  <View style={[
+                    styles.boardImage, 
+                    styles.placeholderImage,
+                    item.posts === 0 && styles.emptyPlaceholderImage
+                  ]}>
+                    <Text style={[
+                      styles.placeholderText,
+                      item.posts === 0 && styles.emptyPlaceholderText
+                    ]}>
+                      {(item.title || 'U').charAt(0)}
+                    </Text>
                   </View>
                 )}
               </View>
-              <Text style={styles.boardTitle}>{item.title}</Text>
-              <Text style={styles.boardPosts}>{item.posts || 0} post{(item.posts || 0) !== 1 ? 's' : ''}</Text>
+              <Text style={[
+                styles.boardTitle,
+                item.posts === 0 && styles.emptyBoardTitle
+              ]}>
+                {item.title}
+              </Text>
+              <Text style={[
+                styles.boardPosts,
+                item.posts === 0 && styles.emptyBoardPosts
+              ]}>
+                {item.posts === 0 ? 'No posts yet' : `${item.posts} post${item.posts !== 1 ? 's' : ''}`}
+              </Text>
             </Pressable>
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No location boards available</Text>
+              <Text style={styles.emptySubtext}>Create a post to start a new location board!</Text>
             </View>
           }
         />
@@ -368,12 +416,22 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  emptyBoardCard: {
+    backgroundColor: '#f8f8f8',
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderStyle: 'dashed',
+  },
   boardImageContainer: { width: '100%', height: 80, marginBottom: 8 },
   boardImage: { width: '100%', height: '100%', borderRadius: 8, resizeMode: 'cover' },
   placeholderImage: { backgroundColor: '#1e90ff', justifyContent: 'center', alignItems: 'center' },
+  emptyPlaceholderImage: { backgroundColor: '#ccc' },
   placeholderText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  emptyPlaceholderText: { color: '#999' },
   boardTitle: { fontWeight: '600', fontSize: 15, color: '#1e1e1e', marginBottom: 4 },
+  emptyBoardTitle: { color: '#999' },
   boardPosts: { fontSize: 12, color: '#666' },
+  emptyBoardPosts: { color: '#999', fontStyle: 'italic' },
   discussionCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -439,5 +497,3 @@ const styles = StyleSheet.create({
 });
 
 export default CommunityHome;
-
-
