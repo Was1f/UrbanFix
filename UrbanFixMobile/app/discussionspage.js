@@ -81,6 +81,10 @@ const Discussions = () => {
     return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
 
+  const handlePostPress = (post) => {
+    router.push(`/post-detail?postId=${post._id}`);
+  };
+
   const handleReport = async (discussionId) => {
     try {
       const response = await fetch(apiUrl('/api/moderation/user/report'), {
@@ -135,17 +139,225 @@ const Discussions = () => {
     }
   };
 
+  const handleDelete = async (discussionId) => {
+    Alert.alert(
+      'Delete Discussion',
+      'Are you sure you want to delete this discussion? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await fetch(apiUrl(`/api/discussions/${discussionId}`), {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              });
+
+              if (response.ok) {
+                // Remove from local state
+                setDiscussions(prev => prev.filter(d => d._id !== discussionId));
+                Alert.alert('Success', 'Discussion deleted successfully');
+                
+                // Update board count by refetching discussions
+                // This will trigger the board count update on the backend
+                setTimeout(() => {
+                  fetchDiscussions();
+                }, 1000);
+              } else {
+                throw new Error('Failed to delete discussion');
+              }
+            } catch (error) {
+              console.error('Error deleting:', error);
+              Alert.alert('Error', 'Failed to delete discussion');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const retryFetch = () => {
     setError(null);
     fetchDiscussions();
   };
 
+  const renderPostTypeIndicator = (post) => {
+    let icon = '';
+    let color = '#666';
+    
+    switch (post.type) {
+      case 'Poll':
+        icon = '📊';
+        color = '#1e90ff';
+        break;
+      case 'Event':
+        icon = '📅';
+        color = '#4caf50';
+        break;
+      case 'Donation':
+        icon = '💰';
+        color = '#ff9800';
+        break;
+      case 'Volunteer':
+        icon = '🤝';
+        color = '#9c27b0';
+        break;
+      case 'Report':
+        icon = '⚠️';
+        color = '#f44336';
+        break;
+      default:
+        icon = '📝';
+    }
+
+    return (
+      <View style={[styles.typePill, { backgroundColor: color + '20' }]}>
+        <Text style={[styles.typeText, { color }]}>{icon} {post.type}</Text>
+      </View>
+    );
+  };
+
+  const renderPostPreview = (post) => {
+    switch (post.type) {
+      case 'Poll':
+        // Handle Map object from MongoDB
+        let totalVotes = 0;
+        if (post.pollVotes) {
+          if (post.pollVotes instanceof Map) {
+            totalVotes = Array.from(post.pollVotes.values()).reduce((sum, count) => sum + count, 0);
+          } else if (typeof post.pollVotes === 'object') {
+            totalVotes = Object.values(post.pollVotes).reduce((sum, count) => sum + count, 0);
+          }
+        }
+        return (
+          <Text style={styles.postPreview}>
+            Poll • {totalVotes} votes • {post.pollOptions?.length || 0} options
+          </Text>
+        );
+      
+      case 'Event':
+        const eventDate = post.eventDate ? new Date(post.eventDate).toLocaleDateString() : 'Date TBD';
+        return (
+          <Text style={styles.postPreview}>
+            Event • {eventDate} • {post.attendeeCount || 0} attending
+          </Text>
+        );
+      
+      case 'Donation':
+        const raised = post.currentAmount || 0;
+        const goal = post.goalAmount;
+        const progress = goal ? Math.round((raised / goal) * 100) : 0;
+        return (
+          <Text style={styles.postPreview}>
+            Donation • ৳{raised.toLocaleString()} raised{goal ? ` (${progress}% of ৳${goal.toLocaleString()})` : ''}
+          </Text>
+        );
+      
+      case 'Volunteer':
+        const volunteersText = post.volunteersNeeded ? 
+          ` of ${post.volunteersNeeded} needed` : '';
+        return (
+          <Text style={styles.postPreview}>
+            Volunteer • {post.volunteerCount || 0} signed up{volunteersText}
+          </Text>
+        );
+      
+      case 'Report':
+        return (
+          <Text style={styles.postPreview}>
+            Community Report • Help resolve this issue
+          </Text>
+        );
+      
+      default:
+        return null;
+    }
+  };
+
+  const renderInteractionButtons = (post) => {
+    const buttons = [];
+
+    switch (post.type) {
+      case 'Poll':
+        buttons.push(
+          <Pressable
+            key="vote"
+            style={styles.interactionButton}
+            onPress={() => handlePostPress(post)}
+          >
+            <Text style={styles.interactionButtonText}>📊 Vote</Text>
+          </Pressable>
+        );
+        break;
+
+      case 'Event':
+        buttons.push(
+          <Pressable
+            key="rsvp"
+            style={styles.interactionButton}
+            onPress={() => handlePostPress(post)}
+          >
+            <Text style={styles.interactionButtonText}>📅 RSVP</Text>
+          </Pressable>
+        );
+        break;
+
+      case 'Donation':
+        buttons.push(
+          <Pressable
+            key="donate"
+            style={styles.interactionButton}
+            onPress={() => handlePostPress(post)}
+          >
+            <Text style={styles.interactionButtonText}>💰 Donate</Text>
+          </Pressable>
+        );
+        break;
+
+      case 'Volunteer':
+        buttons.push(
+          <Pressable
+            key="volunteer"
+            style={styles.interactionButton}
+            onPress={() => handlePostPress(post)}
+          >
+            <Text style={styles.interactionButtonText}>🤝 Volunteer</Text>
+          </Pressable>
+        );
+        break;
+    }
+
+    buttons.push(
+      <Pressable
+        key="comment"
+        style={styles.interactionButton}
+        onPress={() => handlePostPress(post)}
+      >
+        <Text style={styles.interactionButtonText}>💬 Comment</Text>
+      </Pressable>
+    );
+
+    return (
+      <View style={styles.interactionButtonsRow}>
+        {buttons}
+      </View>
+    );
+  };
+
   const renderDiscussion = ({ item: d }) => (
-    <View style={styles.discussionCard}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.discussionCard,
+        pressed && { transform: [{ scale: 0.98 }] }
+      ]}
+      onPress={() => handlePostPress(d)}
+    >
       <View style={styles.discussionHeader}>
-        <View style={styles.typePill}>
-          <Text style={styles.typeText}>{d.type}</Text>
-        </View>
+        {renderPostTypeIndicator(d)}
         {!!d.location && <Text style={styles.locationText}>📍 {d.location}</Text>}
       </View>
 
@@ -154,14 +366,35 @@ const Discussions = () => {
       <View style={styles.discussionContent}>
         <Text style={styles.discussionTitle}>{d.title}</Text>
         {!!d.description && (
-          <Text style={styles.discussionDescription}>
+          <Text style={styles.discussionDescription} numberOfLines={2}>
             {d.description}
           </Text>
         )}
+        
+        {/* Render type-specific preview */}
+        {renderPostPreview(d)}
+        
         <Text style={styles.discussionAuthor}>
           By {d.author || 'Anonymous'} • {formatTimeAgo(d.createdAt || d.time)}
         </Text>
+        
+        <Text style={styles.commentsCount}>
+          💬 {d.comments?.length || 0} comments
+        </Text>
+        
+        {/* Render interaction buttons */}
+        {renderInteractionButtons(d)}
+        
         <View style={styles.actionsRow}>
+          {/* Delete button (for demo purposes - in production, add proper auth checks) */}
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.deleteButton, pressed && { backgroundColor: '#ffebee' }]}
+            onPress={() => handleDelete(d._id)}
+          >
+            <Text style={styles.deleteButtonText}>🗑️ Delete</Text>
+          </Pressable>
+          
           {(() => {
             const isReported = !!reportedMap[d._id];
             if (isReported) {
@@ -198,7 +431,7 @@ const Discussions = () => {
           })()}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 
   if (loading) {
@@ -339,65 +572,109 @@ const styles = StyleSheet.create({
   },
   discussionCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
     marginHorizontal: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: 12,
+    borderRadius: 12,
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   discussionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
     paddingBottom: 8,
   },
-  typePill: { 
-    backgroundColor: '#eee', 
-    paddingHorizontal: 10, 
-    paddingVertical: 4, 
-    borderRadius: 12 
+  typePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  typeText: { 
-    fontSize: 12, 
-    color: '#000', 
-    fontWeight: '600' 
+  typeText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
-  locationText: { 
-    fontSize: 12, 
-    color: '#666', 
-    fontWeight: '500' 
+  locationText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
   },
-  discussionImage: { 
-    width: '100%', 
-    height: 200, 
-    resizeMode: 'cover' 
+  discussionImage: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
   },
-  discussionContent: { 
-    padding: 12 
+  discussionContent: {
+    padding: 16,
   },
-  discussionTitle: { 
-    fontWeight: '600', 
-    fontSize: 16, 
-    color: '#1e1e1e', 
-    marginBottom: 8 
+  discussionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
   },
-  discussionDescription: { 
-    fontSize: 14, 
-    color: '#666', 
-    lineHeight: 20, 
-    marginBottom: 8 
+  discussionDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 8,
   },
-  discussionAuthor: { 
-    fontSize: 12, 
+  postPreview: {
+    fontSize: 13,
+    color: '#1e90ff',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  discussionAuthor: {
+    fontSize: 12,
     color: '#999',
     marginBottom: 8,
   },
-  actionsRow: { 
-    flexDirection: 'row' 
+  commentsCount: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 12,
+  },
+  interactionButtonsRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  interactionButton: {
+    backgroundColor: '#f0f8ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1e90ff',
+  },
+  interactionButtonText: {
+    fontSize: 12,
+    color: '#1e90ff',
+    fontWeight: '500',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    backgroundColor: '#ffebee',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f44336',
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    color: '#f44336',
+    fontWeight: '500',
   },
   outlineButton: {
     backgroundColor: '#fff',
@@ -406,7 +683,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#000',
-    alignSelf: 'flex-start',
   },
   outlineButtonDisabled: {
     backgroundColor: '#f2f2f2',

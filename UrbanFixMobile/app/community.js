@@ -92,6 +92,10 @@ const CommunityHome = () => {
     router.push(`/discussionspage?location=${encodeURIComponent(board.title)}`);
   };
 
+  const handlePostPress = (post) => {
+    router.push(`/post-detail?postId=${post._id}`);
+  };
+
   const formatTimeAgo = (dateString) => {
     if (!dateString) return 'Just now';
     const date = new Date(dateString);
@@ -160,6 +164,169 @@ const CommunityHome = () => {
     } catch (e) {
       Alert.alert('Error', 'Failed to revoke report');
     }
+  };
+
+  const renderPostTypeIndicator = (post) => {
+    let icon = '';
+    let color = '#666';
+    
+    switch (post.type) {
+      case 'Poll':
+        icon = '📊';
+        color = '#1e90ff';
+        break;
+      case 'Event':
+        icon = '📅';
+        color = '#4caf50';
+        break;
+      case 'Donation':
+        icon = '💰';
+        color = '#ff9800';
+        break;
+      case 'Volunteer':
+        icon = '🤝';
+        color = '#9c27b0';
+        break;
+      case 'Report':
+        icon = '⚠️';
+        color = '#f44336';
+        break;
+      default:
+        icon = '📝';
+    }
+
+    return (
+      <View style={[styles.typePill, { backgroundColor: color + '20' }]}>
+        <Text style={[styles.typeText, { color }]}>{icon} {post.type}</Text>
+      </View>
+    );
+  };
+
+  const renderPostPreview = (post) => {
+    switch (post.type) {
+      case 'Poll':
+        // Handle Map object from MongoDB
+        let totalVotes = 0;
+        if (post.pollVotes) {
+          if (post.pollVotes instanceof Map) {
+            totalVotes = Array.from(post.pollVotes.values()).reduce((sum, count) => sum + count, 0);
+          } else if (typeof post.pollVotes === 'object') {
+            totalVotes = Object.values(post.pollVotes).reduce((sum, count) => sum + count, 0);
+          }
+        }
+        return (
+          <Text style={styles.postPreview}>
+            Poll • {totalVotes} votes • {post.pollOptions?.length || 0} options
+          </Text>
+        );
+      
+      case 'Event':
+        const eventDate = post.eventDate ? new Date(post.eventDate).toLocaleDateString() : 'Date TBD';
+        return (
+          <Text style={styles.postPreview}>
+            Event • {eventDate} • {post.attendeeCount || 0} attending
+          </Text>
+        );
+      
+      case 'Donation':
+        const raised = post.currentAmount || 0;
+        const goal = post.goalAmount;
+        const progress = goal ? Math.round((raised / goal) * 100) : 0;
+        return (
+          <Text style={styles.postPreview}>
+            Donation • ৳{raised.toLocaleString()} raised{goal ? ` (${progress}% of ৳${goal.toLocaleString()})` : ''}
+          </Text>
+        );
+      
+      case 'Volunteer':
+        const volunteersText = post.volunteersNeeded ? 
+          ` of ${post.volunteersNeeded} needed` : '';
+        return (
+          <Text style={styles.postPreview}>
+            Volunteer • {post.volunteerCount || 0} signed up{volunteersText}
+          </Text>
+        );
+      
+      case 'Report':
+        return (
+          <Text style={styles.postPreview}>
+            Community Report • Help resolve this issue
+          </Text>
+        );
+      
+      default:
+        return null;
+    }
+  };
+
+  const renderInteractionButtons = (post) => {
+    const buttons = [];
+
+    switch (post.type) {
+      case 'Poll':
+        buttons.push(
+          <Pressable
+            key="vote"
+            style={styles.interactionButton}
+            onPress={() => handlePostPress(post)}
+          >
+            <Text style={styles.interactionButtonText}>📊 Vote</Text>
+          </Pressable>
+        );
+        break;
+
+      case 'Event':
+        buttons.push(
+          <Pressable
+            key="rsvp"
+            style={styles.interactionButton}
+            onPress={() => handlePostPress(post)}
+          >
+            <Text style={styles.interactionButtonText}>📅 RSVP</Text>
+          </Pressable>
+        );
+        break;
+
+      case 'Donation':
+        buttons.push(
+          <Pressable
+            key="donate"
+            style={styles.interactionButton}
+            onPress={() => handlePostPress(post)}
+          >
+            <Text style={styles.interactionButtonText}>💰 Donate</Text>
+          </Pressable>
+        );
+        break;
+
+      case 'Volunteer':
+        buttons.push(
+          <Pressable
+            key="volunteer"
+            style={styles.interactionButton}
+            onPress={() => handlePostPress(post)}
+          >
+            <Text style={styles.interactionButtonText}>🤝 Volunteer</Text>
+          </Pressable>
+        );
+        break;
+    }
+
+    buttons.push(
+      <Pressable
+        key="comment"
+        style={styles.interactionButton}
+        onPress={() => handlePostPress(post)}
+      >
+        <Text style={styles.interactionButtonText}>💬 Comment</Text>
+      </Pressable>
+    );
+
+    return (
+      <View style={styles.interactionButtonsRow}>
+        {buttons}
+      </View>
+    );
   };
 
   if (loading) {
@@ -273,11 +440,16 @@ const CommunityHome = () => {
         <Text style={styles.sectionTitle}>Recent Discussions</Text>
         {discussions.length > 0 ? (
           discussions.slice(0, 10).map((d, index) => (
-            <View style={styles.discussionCard} key={d._id || index}>
+            <Pressable
+              key={d._id || index}
+              style={({ pressed }) => [
+                styles.discussionCard,
+                pressed && { transform: [{ scale: 0.98 }] }
+              ]}
+              onPress={() => handlePostPress(d)}
+            >
               <View style={styles.discussionHeader}>
-                <View style={styles.typePill}>
-                  <Text style={styles.typeText}>{d.type}</Text>
-                </View>
+                {renderPostTypeIndicator(d)}
                 {!!d.location && <Text style={styles.locationText}>📍 {d.location}</Text>}
               </View>
 
@@ -290,9 +462,21 @@ const CommunityHome = () => {
                     {d.description}
                   </Text>
                 )}
+                
+                {/* Render type-specific preview */}
+                {renderPostPreview(d)}
+                
                 <Text style={styles.discussionAuthor}>
                   By {d.author || 'Anonymous'} • {formatTimeAgo(d.createdAt || d.time)}
                 </Text>
+                
+                <Text style={styles.commentsCount}>
+                  💬 {d.comments?.length || 0} comments
+                </Text>
+                
+                {/* Render interaction buttons */}
+                {renderInteractionButtons(d)}
+                
                 <View style={styles.actionsRow}>
                   {(() => {
                     const isReported = !!reportedMap[d._id];
@@ -324,7 +508,7 @@ const CommunityHome = () => {
                   })()}
                 </View>
               </View>
-            </View>
+            </Pressable>
           ))
         ) : (
           <View style={styles.emptyState}>
@@ -365,135 +549,254 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: 'bold',
+    color: '#333',
     textAlign: 'center',
-    color: '#000',
   },
   adminButton: {
-    backgroundColor: '#fff',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    minWidth: 72,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#000',
+    backgroundColor: '#1e90ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  adminButtonText: { color: '#000', fontWeight: '600' },
+  adminButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   tagsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginBottom: 10,
-    flexWrap: 'wrap',
+    marginBottom: 20,
+    gap: 8,
   },
   tagButton: {
     backgroundColor: '#fff',
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    paddingHorizontal: 14,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#000',
-    marginRight: 8,
-    marginBottom: 8,
+    borderColor: '#ddd',
   },
-  tagText: { color: '#000', fontWeight: '600' },
+  tagText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    marginTop: 18,
-    marginBottom: 10,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
     paddingHorizontal: 16,
-    color: '#1e1e1e',
   },
   boardCard: {
-    width: width * 0.4,
     backgroundColor: '#fff',
+    marginHorizontal: 8,
+    marginBottom: 16,
     borderRadius: 12,
-    marginLeft: 16,
     padding: 12,
+    width: 120,
+    alignItems: 'center',
+    elevation: 2,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
   },
   emptyBoardCard: {
-    backgroundColor: '#f8f8f8',
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    borderStyle: 'dashed',
+    opacity: 0.6,
   },
-  boardImageContainer: { width: '100%', height: 80, marginBottom: 8 },
-  boardImage: { width: '100%', height: '100%', borderRadius: 8, resizeMode: 'cover' },
-  placeholderImage: { backgroundColor: '#1e90ff', justifyContent: 'center', alignItems: 'center' },
-  emptyPlaceholderImage: { backgroundColor: '#ccc' },
-  placeholderText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  emptyPlaceholderText: { color: '#999' },
-  boardTitle: { fontWeight: '600', fontSize: 15, color: '#1e1e1e', marginBottom: 4 },
-  emptyBoardTitle: { color: '#999' },
-  boardPosts: { fontSize: 12, color: '#666' },
-  emptyBoardPosts: { color: '#999', fontStyle: 'italic' },
+  boardImageContainer: {
+    marginBottom: 8,
+  },
+  boardImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
+  placeholderImage: {
+    backgroundColor: '#1e90ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyPlaceholderImage: {
+    backgroundColor: '#ccc',
+  },
+  placeholderText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  emptyPlaceholderText: {
+    color: '#999',
+  },
+  boardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  emptyBoardTitle: {
+    color: '#999',
+  },
+  boardPosts: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  emptyBoardPosts: {
+    color: '#bbb',
+  },
   discussionCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
     marginHorizontal: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: 12,
+    borderRadius: 12,
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   discussionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
     paddingBottom: 8,
   },
-  typePill: { backgroundColor: '#eee', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  typeText: { fontSize: 12, color: '#000', fontWeight: '600' },
-  locationText: { fontSize: 12, color: '#666', fontWeight: '500' },
-  discussionImage: { width: '100%', height: 120, resizeMode: 'cover' },
-  discussionContent: { padding: 12 },
-  discussionTitle: { fontWeight: '600', fontSize: 16, color: '#1e1e1e', marginBottom: 4 },
-  discussionDescription: { fontSize: 14, color: '#666', lineHeight: 20, marginBottom: 8 },
-  discussionAuthor: { fontSize: 12, color: '#999' },
-  actionsRow: { marginTop: 8, flexDirection: 'row' },
-  outlineButton: {
-    backgroundColor: '#fff',
-    paddingVertical: 6,
+  typePill: {
     paddingHorizontal: 12,
-    borderRadius: 18,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  typeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  locationText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  discussionImage: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
+  },
+  discussionContent: {
+    padding: 16,
+  },
+  discussionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  discussionDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  postPreview: {
+    fontSize: 13,
+    color: '#1e90ff',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  discussionAuthor: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 8,
+  },
+  commentsCount: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 12,
+  },
+  interactionButtonsRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    gap: 8,
+  },
+  interactionButton: {
+    backgroundColor: '#f0f8ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#000',
-    alignSelf: 'flex-start',
+    borderColor: '#1e90ff',
+  },
+  interactionButtonText: {
+    fontSize: 12,
+    color: '#1e90ff',
+    fontWeight: '500',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  outlineButton: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#fff',
   },
   outlineButtonDisabled: {
-    backgroundColor: '#f2f2f2',
-    borderColor: '#999',
+    backgroundColor: '#f5f5f5',
+    borderColor: '#ccc',
   },
-  outlineButtonText: { color: '#000', fontWeight: '600', fontSize: 12 },
-  outlineButtonTextDisabled: { color: '#666' },
-  emptyState: { padding: 40, alignItems: 'center' },
-  emptyText: { fontSize: 16, color: '#666', fontWeight: '500', marginBottom: 4 },
-  emptySubtext: { fontSize: 14, color: '#999', textAlign: 'center' },
+  outlineButtonText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  outlineButtonTextDisabled: {
+    color: '#999',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#999',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#bbb',
+    textAlign: 'center',
+  },
   fab: {
     position: 'absolute',
-    bottom: 30,
-    right: 25,
-    width: 55,
-    height: 55,
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
     borderRadius: 28,
     backgroundColor: '#1e90ff',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
+    elevation: 6,
     shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
   },
-  fabText: { fontSize: 28, color: '#fff', fontWeight: '300' },
+  fabText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
 });
 
 export default CommunityHome;
