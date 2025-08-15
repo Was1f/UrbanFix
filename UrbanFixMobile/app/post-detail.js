@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { Audio } from 'expo-av';
 import { apiUrl } from '../constants/api';
 
 const PostDetail = () => {
@@ -30,6 +31,12 @@ const PostDetail = () => {
   const [reportedMap, setReportedMap] = useState({});
   const [userVote, setUserVote] = useState(null);
   const [userRSVP, setUserRSVP] = useState(false);
+  const [sound, setSound] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioError, setAudioError] = useState(null);
+
+  // Get current user (in real app, get from auth context)
+  const getCurrentUser = () => 'Anonymous'; // Replace with actual user ID/username
 
   const fetchPostData = useCallback(async () => {
     try {
@@ -52,12 +59,21 @@ const PostDetail = () => {
       setPost(postData);
       setComments(commentsData);
 
-      // Set user interaction states (in real app, get from user auth)
-      if (postData.type === 'Poll') {
-        setUserVote(postData.userVote || null);
+      // Set user interaction states based on current user
+      const currentUser = getCurrentUser();
+      
+      if (postData.type === 'Poll' && postData.userVotes) {
+        // Check if user has voted
+        const userVoteEntry = Object.entries(postData.userVotes || {}).find(([userId]) => userId === currentUser);
+        setUserVote(userVoteEntry ? userVoteEntry[1] : null);
       }
+      
       if (['Event', 'Volunteer'].includes(postData.type)) {
-        setUserRSVP(postData.userRSVP || false);
+        // Check if user has RSVP'd
+        const hasRSVP = postData.type === 'Event' 
+          ? (postData.attendees || []).includes(currentUser)
+          : (postData.volunteers || []).includes(currentUser);
+        setUserRSVP(hasRSVP);
       }
 
       // Map reported items
@@ -83,6 +99,13 @@ const PostDetail = () => {
 
   useEffect(() => {
     fetchPostData();
+    
+    // Cleanup audio on unmount
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
   }, [fetchPostData]);
 
   useFocusEffect(
@@ -123,7 +146,7 @@ const PostDetail = () => {
         body: JSON.stringify({
           option,
           previousVote: userVote,
-          username: 'Anonymous'
+          username: getCurrentUser()
         }),
       });
 
@@ -147,7 +170,7 @@ const PostDetail = () => {
       const response = await fetch(apiUrl(`/api/discussions/${postId}/${endpoint}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'Anonymous' }),
+        body: JSON.stringify({ username: getCurrentUser() }),
       });
 
       if (response.ok) {
@@ -184,7 +207,7 @@ const PostDetail = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   amount: parseFloat(amount),
-                  username: 'Anonymous'
+                  username: getCurrentUser()
                 }),
               });
 
@@ -208,6 +231,52 @@ const PostDetail = () => {
     );
   };
 
+  const handlePlayAudio = async () => {
+    if (!post.audio) {
+      Alert.alert('No Audio', 'This post does not have an audio file.');
+      return;
+    }
+
+    try {
+      setAudioError(null);
+      
+      if (sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded) {
+          if (isPlaying) {
+            await sound.pauseAsync();
+            setIsPlaying(false);
+          } else {
+            await sound.playAsync();
+            setIsPlaying(true);
+          }
+          return;
+        }
+      }
+
+      // Load and play new audio
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: post.audio },
+        { shouldPlay: true }
+      );
+      
+      setSound(newSound);
+      setIsPlaying(true);
+      
+      // Set up playback status listener
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      setAudioError('Failed to play audio');
+      Alert.alert('Audio Error', 'Failed to play audio file. Please check the audio URL.');
+    }
+  };
+
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
 
@@ -219,7 +288,7 @@ const PostDetail = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: newComment.trim(),
-          author: 'Anonymous',
+          author: getCurrentUser(),
         }),
       });
 
@@ -417,6 +486,30 @@ const PostDetail = () => {
     );
   };
 
+  const renderAudioSection = () => {
+    if (!post.audio) return null;
+
+    return (
+      <View style={styles.audioSection}>
+        <Text style={styles.sectionTitle}>Audio</Text>
+        <Pressable
+          style={[
+            styles.audioButton,
+            isPlaying && styles.audioButtonPlaying
+          ]}
+          onPress={handlePlayAudio}
+        >
+          <Text style={styles.audioButtonText}>
+            {isPlaying ? '⏸️ Pause Audio' : '🔊 Play Audio'}
+          </Text>
+        </Pressable>
+        {audioError && (
+          <Text style={styles.audioError}>{audioError}</Text>
+        )}
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -471,7 +564,11 @@ const PostDetail = () => {
             </View>
 
             {post.image && (
-              <Image source={{ uri: post.image }} style={styles.postImage} />
+              <Image 
+                source={{ uri: post.image }} 
+                style={styles.postImage}
+                resizeMode="cover"
+              />
             )}
 
             <View style={styles.postContent}>
@@ -483,6 +580,9 @@ const PostDetail = () => {
                 By {post.author || 'Anonymous'} • {formatTimeAgo(post.createdAt || post.time)}
               </Text>
             </View>
+
+            {/* Audio section */}
+            {renderAudioSection()}
 
             {/* Type-specific sections */}
             {renderPollSection()}
@@ -679,6 +779,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     fontWeight: '500',
+  },
+
+  // Audio section styles
+  audioSection: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  audioButton: {
+    backgroundColor: '#f0f8ff',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1e90ff',
+    alignItems: 'center',
+  },
+  audioButtonPlaying: {
+    backgroundColor: '#1e90ff',
+  },
+  audioButtonText: {
+    fontSize: 16,
+    color: '#1e90ff',
+    fontWeight: '600',
+  },
+  audioError: {
+    fontSize: 12,
+    color: '#e74c3c',
+    marginTop: 8,
+    textAlign: 'center',
   },
 
   // Section styles
