@@ -1,17 +1,37 @@
 const mongoose = require('mongoose');
 
-const reportSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  title: { type: String, required: true, maxlength: 50 },
-  text: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-  upvotes: { type: Number, default: 0 },
-  downvotes: { type: Number, default: 0 },
-  currentAction: {
-    type: String,
-    enum: ['unresolved', 'under work', 'failed', 'resolved'],
-    default: 'unresolved'
+const ReportSchema = new mongoose.Schema({
+  discussionId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Discussion', 
+    required: true 
+  },
+  reason: { 
+    type: String, 
+    required: true,
+    enum: ['Inappropriate Content', 'Spam', 'Harassment', 'Misinformation', 'Hate Speech', 'Violence', 'Other']
+  },
+  reporterUsername: { 
+    type: String, 
+    default: 'Anonymous' 
+  },
+  status: { 
+    type: String, 
+    default: 'pending',
+    enum: ['pending', 'approved', 'rejected', 'removed', 'resolved']
+  },
+  adminNotes: { 
+    type: String 
+  },
+  reviewedBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Admin' 
+  },
+  reviewedAt: { 
+    type: Date 
   }
+}, {
+  timestamps: true
 });
 
-module.exports = mongoose.model('Report', reportSchema);
+module.exports = mongoose.model('Report', ReportSchema);
