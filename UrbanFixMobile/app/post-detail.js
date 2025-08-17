@@ -12,10 +12,10 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Audio } from 'expo-av';
 import { apiUrl } from '../constants/api';
 
 const PostDetail = () => {
@@ -31,12 +31,11 @@ const PostDetail = () => {
   const [reportedMap, setReportedMap] = useState({});
   const [userVote, setUserVote] = useState(null);
   const [userRSVP, setUserRSVP] = useState(false);
-  const [sound, setSound] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioError, setAudioError] = useState(null);
-
-  // Get current user (in real app, get from auth context)
-  const getCurrentUser = () => 'Anonymous'; // Replace with actual user ID/username
+  
+  // Donation modal states
+  const [showDonationModal, setShowDonationModal] = useState(false);
+  const [donationAmount, setDonationAmount] = useState('');
+  const [donationLoading, setDonationLoading] = useState(false);
 
   const fetchPostData = useCallback(async () => {
     try {
@@ -59,21 +58,12 @@ const PostDetail = () => {
       setPost(postData);
       setComments(commentsData);
 
-      // Set user interaction states based on current user
-      const currentUser = getCurrentUser();
-      
-      if (postData.type === 'Poll' && postData.userVotes) {
-        // Check if user has voted
-        const userVoteEntry = Object.entries(postData.userVotes || {}).find(([userId]) => userId === currentUser);
-        setUserVote(userVoteEntry ? userVoteEntry[1] : null);
+      // Set user interaction states (in real app, get from user auth)
+      if (postData.type === 'Poll') {
+        setUserVote(postData.userVote || null);
       }
-      
       if (['Event', 'Volunteer'].includes(postData.type)) {
-        // Check if user has RSVP'd
-        const hasRSVP = postData.type === 'Event' 
-          ? (postData.attendees || []).includes(currentUser)
-          : (postData.volunteers || []).includes(currentUser);
-        setUserRSVP(hasRSVP);
+        setUserRSVP(postData.userRSVP || false);
       }
 
       // Map reported items
@@ -99,13 +89,6 @@ const PostDetail = () => {
 
   useEffect(() => {
     fetchPostData();
-    
-    // Cleanup audio on unmount
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
   }, [fetchPostData]);
 
   useFocusEffect(
@@ -146,7 +129,7 @@ const PostDetail = () => {
         body: JSON.stringify({
           option,
           previousVote: userVote,
-          username: getCurrentUser()
+          username: 'Anonymous'
         }),
       });
 
@@ -170,7 +153,7 @@ const PostDetail = () => {
       const response = await fetch(apiUrl(`/api/discussions/${postId}/${endpoint}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: getCurrentUser() }),
+        body: JSON.stringify({ username: 'Anonymous' }),
       });
 
       if (response.ok) {
@@ -188,92 +171,42 @@ const PostDetail = () => {
   };
 
   const handleDonate = () => {
-    Alert.prompt(
-      'Make a Donation',
-      'Enter donation amount (BDT):',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Donate',
-          onPress: async (amount) => {
-            if (!amount || isNaN(amount)) {
-              Alert.alert('Error', 'Please enter a valid amount');
-              return;
-            }
-            
-            try {
-              const response = await fetch(apiUrl(`/api/discussions/${postId}/donate`), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  amount: parseFloat(amount),
-                  username: getCurrentUser()
-                }),
-              });
-
-              if (response.ok) {
-                const updatedPost = await response.json();
-                setPost(updatedPost);
-                Alert.alert('Success', `Thank you for your donation of ৳${amount}!`);
-              } else {
-                throw new Error('Failed to process donation');
-              }
-            } catch (error) {
-              console.error('Error donating:', error);
-              Alert.alert('Error', 'Failed to process donation');
-            }
-          }
-        }
-      ],
-      'plain-text',
-      '',
-      'numeric'
-    );
+    setShowDonationModal(true);
   };
 
-  const handlePlayAudio = async () => {
-    if (!post.audio) {
-      Alert.alert('No Audio', 'This post does not have an audio file.');
+  const processDonation = async () => {
+    if (!donationAmount.trim() || isNaN(donationAmount) || parseFloat(donationAmount) <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
       return;
     }
-
+    
     try {
-      setAudioError(null);
+      setDonationLoading(true);
       
-      if (sound) {
-        const status = await sound.getStatusAsync();
-        if (status.isLoaded) {
-          if (isPlaying) {
-            await sound.pauseAsync();
-            setIsPlaying(false);
-          } else {
-            await sound.playAsync();
-            setIsPlaying(true);
-          }
-          return;
-        }
-      }
-
-      // Load and play new audio
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: post.audio },
-        { shouldPlay: true }
-      );
-      
-      setSound(newSound);
-      setIsPlaying(true);
-      
-      // Set up playback status listener
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          setIsPlaying(false);
-        }
+      const response = await fetch(apiUrl(`/api/discussions/${postId}/donate`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseFloat(donationAmount),
+          username: 'Anonymous'
+        }),
       });
-      
+
+      if (response.ok) {
+        const updatedPost = await response.json();
+        setPost(updatedPost);
+        setShowDonationModal(false);
+        setDonationAmount('');
+        Alert.alert('Success', `Thank you for your donation of ৳${donationAmount}!`);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to process donation');
+      }
     } catch (error) {
-      console.error('Error playing audio:', error);
-      setAudioError('Failed to play audio');
-      Alert.alert('Audio Error', 'Failed to play audio file. Please check the audio URL.');
+      console.error('Error donating:', error);
+      Alert.alert('Error', error.message || 'Failed to process donation');
+    } finally {
+      setDonationLoading(false);
     }
   };
 
@@ -288,7 +221,7 @@ const PostDetail = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: newComment.trim(),
-          author: getCurrentUser(),
+          author: 'Anonymous',
         }),
       });
 
@@ -308,6 +241,59 @@ const PostDetail = () => {
       setCommentLoading(false);
     }
   };
+
+  const renderDonationModal = () => (
+    <Modal
+      visible={showDonationModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowDonationModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Make a Donation</Text>
+          <Text style={styles.modalSubtitle}>Enter donation amount (BDT):</Text>
+          
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Amount in BDT"
+            value={donationAmount}
+            onChangeText={setDonationAmount}
+            keyboardType="numeric"
+            autoFocus={true}
+          />
+          
+          <View style={styles.modalButtons}>
+            <Pressable
+              style={[styles.modalButton, styles.modalCancelButton]}
+              onPress={() => {
+                setShowDonationModal(false);
+                setDonationAmount('');
+              }}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+            
+            <Pressable
+              style={[
+                styles.modalButton, 
+                styles.modalDonateButton,
+                donationLoading && styles.modalButtonDisabled
+              ]}
+              onPress={processDonation}
+              disabled={donationLoading}
+            >
+              {donationLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.modalDonateText}>Donate</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 
   const renderPollSection = () => {
     if (post.type !== 'Poll' || !post.pollOptions) return null;
@@ -422,7 +408,7 @@ const PostDetail = () => {
         )}
 
         <Text style={styles.donorCount}>
-          {post.donors?.length || 0} donors
+          {post.donors?.length || 0} donations
         </Text>
 
         <Pressable style={styles.donateButton} onPress={handleDonate}>
@@ -486,30 +472,6 @@ const PostDetail = () => {
     );
   };
 
-  const renderAudioSection = () => {
-    if (!post.audio) return null;
-
-    return (
-      <View style={styles.audioSection}>
-        <Text style={styles.sectionTitle}>Audio</Text>
-        <Pressable
-          style={[
-            styles.audioButton,
-            isPlaying && styles.audioButtonPlaying
-          ]}
-          onPress={handlePlayAudio}
-        >
-          <Text style={styles.audioButtonText}>
-            {isPlaying ? '⏸️ Pause Audio' : '🔊 Play Audio'}
-          </Text>
-        </Pressable>
-        {audioError && (
-          <Text style={styles.audioError}>{audioError}</Text>
-        )}
-      </View>
-    );
-  };
-
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -564,11 +526,7 @@ const PostDetail = () => {
             </View>
 
             {post.image && (
-              <Image 
-                source={{ uri: post.image }} 
-                style={styles.postImage}
-                resizeMode="cover"
-              />
+              <Image source={{ uri: post.image }} style={styles.postImage} />
             )}
 
             <View style={styles.postContent}>
@@ -580,9 +538,6 @@ const PostDetail = () => {
                 By {post.author || 'Anonymous'} • {formatTimeAgo(post.createdAt || post.time)}
               </Text>
             </View>
-
-            {/* Audio section */}
-            {renderAudioSection()}
 
             {/* Type-specific sections */}
             {renderPollSection()}
@@ -644,6 +599,9 @@ const PostDetail = () => {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Donation Modal */}
+      {renderDonationModal()}
     </SafeAreaView>
   );
 };
@@ -779,36 +737,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     fontWeight: '500',
-  },
-
-  // Audio section styles
-  audioSection: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  audioButton: {
-    backgroundColor: '#f0f8ff',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#1e90ff',
-    alignItems: 'center',
-  },
-  audioButtonPlaying: {
-    backgroundColor: '#1e90ff',
-  },
-  audioButtonText: {
-    fontSize: 16,
-    color: '#1e90ff',
-    fontWeight: '600',
-  },
-  audioError: {
-    fontSize: 12,
-    color: '#e74c3c',
-    marginTop: 8,
-    textAlign: 'center',
   },
 
   // Section styles
@@ -1124,6 +1052,76 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Modal styles for donation
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 24,
+    width: '80%',
+    maxWidth: 320,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelButton: {
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  modalDonateButton: {
+    backgroundColor: '#ffc107',
+  },
+  modalButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalCancelText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalDonateText: {
+    color: '#212529',
     fontSize: 16,
     fontWeight: '600',
   },
