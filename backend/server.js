@@ -24,12 +24,16 @@ const discussionRoutes = require('./routes/discussions');
 const adminRoutes = require('./routes/admin');
 const moderationRoutes = require('./routes/moderation');
 const uploadRouter = require('./routes/upload');
+const emergencyReportRoutes = require('./routes/emergency-reports');
+const emergencyContactRoutes = require('./routes/emergency-contacts');
 
 // ===== Use Routes =====
 app.use('/api/boards', boardRoutes);
 app.use('/api/discussions', discussionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/moderation', moderationRoutes);
+app.use('/api/emergency-reports', emergencyReportRoutes);
+app.use('/api/emergency-contacts', emergencyContactRoutes);
 app.use('/api/upload', uploadRouter);
 
 // ===== Health check endpoint =====

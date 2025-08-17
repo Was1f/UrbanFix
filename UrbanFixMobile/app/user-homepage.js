@@ -77,14 +77,22 @@ export default function UserHomepage() {
         <Text style={[styles.sectionHeading, { marginTop: 14 }]}>Quick Actions</Text>
         <View style={styles.quickGrid}>
           {[
-            { label: 'Report Issue', icon: 'alert-circle-outline' },
-            { label: 'Suggest Improvement', icon: 'create-outline' },
-            { label: 'Community Forum', icon: 'people-outline' },
-            { label: 'Emergency Contacts', icon: 'call-outline' },
-            { label: 'Local Services', icon: 'search-outline' },
-            { label: 'City News', icon: 'newspaper-outline' },
+            { label: 'Report Issue', icon: 'alert-circle-outline', route: '/report-issue' },
+            { label: 'Suggest Improvement', icon: 'create-outline', route: null },
+            { label: 'Community Forum', icon: 'people-outline', route: '/community' },
+            { label: 'Emergency Contacts', icon: 'call-outline', route: '/emergency-contacts' },
+            { label: 'Local Services', icon: 'search-outline', route: null },
+            { label: 'City News', icon: 'newspaper-outline', route: null },
           ].map((item) => (
-            <Pressable key={item.label} style={styles.quickButton} onPress={() => {}}>
+            <Pressable 
+              key={item.label} 
+              style={styles.quickButton} 
+              onPress={() => {
+                if (item.route) {
+                  router.push(item.route);
+                }
+              }}
+            >
               <Ionicons name={item.icon} size={18} color="#000" />
               <Text style={styles.quickLabel}>{item.label}</Text>
             </Pressable>
