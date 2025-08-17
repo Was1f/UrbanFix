@@ -90,3 +90,12 @@ mongoose.connect(
 .catch(err => console.error('MongoDB connection error:', err));
 
 module.exports = app;
+// Routes
+const phoneAuthRoutes = require('./routes/PhoneAuth');
+const userInfoRoutes = require('./routes/UserInfo');
+
+app.use('/api', phoneAuthRoutes);
+app.use('/api/user', userInfoRoutes);
+
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
