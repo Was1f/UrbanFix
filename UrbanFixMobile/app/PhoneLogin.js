@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, Animated, KeyboardAvoidingView, Platform 
 } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import API_URL from "../config/api";
+import { apiUrl } from "../constants/api";
 
 export default function PhoneLogin() {
   const { login } = useContext(AuthContext);
@@ -41,7 +41,7 @@ export default function PhoneLogin() {
     setError('');
 
     try {
-      const res = await fetch(`${API_URL}/api/check-phone`, {
+      const res = await fetch(apiUrl('/api/check-phone'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
@@ -61,31 +61,34 @@ export default function PhoneLogin() {
   };
 
   const handleVerifyOtp = async () => {
-    if (otp !== '12345') { // Hardcoded for now
-      setError('Invalid OTP.');
+    if (!otp || otp.length !== 5) {
+      setError('Please enter a valid 5-digit OTP.');
       return;
     }
 
+    setError('');
+
     try {
-      const res = await fetch(`${API_URL}/api/get-user-by-phone`, {
+      const res = await fetch(apiUrl('/api/verify-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, otp }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        setError(`Server error: ${res.status}`);
+        setError(data.message || `Server error: ${res.status}`);
         return;
       }
 
-      const userData = await res.json();
-      if (!userData || !userData._id) {
-        setError('User not found.');
+      if (!data.success || !data.user || !data.user._id) {
+        setError('Invalid response from server.');
         return;
       }
 
       // ✅ Save user in context (no manual navigation)
-      login(userData);
+      login(data.user);
 
       // No navigation.replace here; AppNavigator will automatically render Home
     } catch (err) {

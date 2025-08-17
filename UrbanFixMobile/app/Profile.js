@@ -3,11 +3,40 @@ import { View, Text, Image, TouchableOpacity, ScrollView, StyleSheet, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import axios from 'axios';
-import API_URL from "../config/api";
+import { apiUrl } from "../constants/api";
 
 export default function Profile({ navigation }) {
-  const { user: loggedInUser, updateUser } = useContext(AuthContext);
+  const authContext = useContext(AuthContext);
+  const router = useRouter();
+  
+  // Handle case where AuthContext is not available
+  if (!authContext) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center', marginTop: 50, fontSize: 16, color: 'red' }}>
+          Authentication context not available. Please login first.
+        </Text>
+        <TouchableOpacity 
+          style={[styles.editBtn, { marginTop: 20 }]}
+          onPress={() => {
+            if (navigation?.navigate) {
+              navigation.navigate('PhoneLogin');
+            } else if (router?.push) {
+              router.push('/PhoneLogin');
+            } else if (typeof window !== 'undefined') {
+              window.location.href = '/PhoneLogin';
+            }
+          }}
+        >
+          <Text style={{ fontWeight: 'bold', color: 'white' }}>Go to Login</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const { user: loggedInUser, updateUser } = authContext;
 
   // Fetch fresh user data on screen focus
   useFocusEffect(
@@ -18,7 +47,7 @@ export default function Profile({ navigation }) {
       if (!loggedInUser?._id) return;
 
       try {
-        const res = await axios.get(`${API_URL}/api/user/${loggedInUser._id}`);
+        const res = await axios.get(apiUrl(`/api/user/${loggedInUser._id}`));
         if (isActive && res.data?._id) {
           updateUser(res.data); // update context
         }
@@ -42,7 +71,15 @@ export default function Profile({ navigation }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => {
+          if (navigation?.goBack) {
+            navigation.goBack();
+          } else if (router?.back) {
+            router.back();
+          } else if (typeof window !== 'undefined') {
+            window.history.back();
+          }
+        }}>
           <Text style={styles.headerBtn}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Profile</Text>
@@ -69,7 +106,18 @@ export default function Profile({ navigation }) {
 
         <TouchableOpacity
           style={styles.editBtn}
-          onPress={() => navigation.navigate('EditProfileScreen', { userId: loggedInUser._id })}
+          onPress={() => {
+            if (navigation?.navigate) {
+              navigation.navigate('EditProfileScreen', { userId: loggedInUser._id });
+            } else if (router?.push) {
+              router.push({
+                pathname: '/EditProfileScreen',
+                params: { userId: loggedInUser._id }
+              });
+            } else if (typeof window !== 'undefined') {
+              window.location.href = `/EditProfileScreen?userId=${loggedInUser._id}`;
+            }
+          }}
         >
           <Text style={{ fontWeight: 'bold', color: 'white' }}>Edit Profile</Text>
         </TouchableOpacity>

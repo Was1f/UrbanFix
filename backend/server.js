@@ -45,6 +45,21 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ===== Community endpoint for mobile app =====
+app.get('/community', (req, res) => {
+  res.json({
+    message: 'Community endpoint is working',
+    available_endpoints: [
+      '/api/boards',
+      '/api/discussions', 
+      '/api/emergency-reports',
+      '/api/emergency-contacts',
+      '/api/admin',
+      '/api/moderation'
+    ]
+  });
+});
+
 // ===== Error Handling Middleware =====
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -69,6 +84,9 @@ function getLocalExternalIPv4() {
 }
 
 // ===== MongoDB Connection =====
+
+const PORT = process.env.PORT || 5000;
+
 mongoose.connect(
   process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/community-app',
   { useNewUrlParser: true, useUnifiedTopology: true }
@@ -76,7 +94,6 @@ mongoose.connect(
 .then(() => {
   console.log('MongoDB Connected');
 
-  const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Server accessible at:`);
@@ -89,13 +106,11 @@ mongoose.connect(
 })
 .catch(err => console.error('MongoDB connection error:', err));
 
-module.exports = app;
-// Routes
+// Routes - moved to the correct position
 const phoneAuthRoutes = require('./routes/PhoneAuth');
 const userInfoRoutes = require('./routes/UserInfo');
 
 app.use('/api', phoneAuthRoutes);
 app.use('/api/user', userInfoRoutes);
 
-
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+module.exports = app;

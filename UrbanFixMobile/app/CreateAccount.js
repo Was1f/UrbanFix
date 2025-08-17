@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import { useNavigation } from '@react-navigation/native'; // ✅ hook for navigation
-import API_URL from '../config/api';
+import { apiUrl } from '../constants/api';
 
 export default function CreateAccount() {
   const navigation = useNavigation(); // ✅ get navigation object
@@ -55,7 +55,7 @@ export default function CreateAccount() {
     setLoading(true);
     try {
       const payload = { fname, lname, phone, email, address, profession, gender };
-      const res = await axios.post(`${API_URL}/api/user`, payload);
+      const res = await axios.post(apiUrl('/api/user'), payload);
 
       if (res.data && res.data._id) {
         Alert.alert('Success', 'Your account has been created successfully.', [

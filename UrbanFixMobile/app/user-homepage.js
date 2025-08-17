@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,16 @@ import {
   SafeAreaView,
   Pressable,
   Image,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { AuthContext } from '../context/AuthContext';
 import { apiUrl } from '../constants/api';
 
 export default function UserHomepage() {
   const router = useRouter();
+  const { user } = useContext(AuthContext);
   const [communityItems, setCommunityItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,11 +44,32 @@ export default function UserHomepage() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
+        <TouchableOpacity 
+          style={styles.headerLeft}
+          onPress={() => router.push('/Profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Go to Profile"
+        >
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>U</Text>
+            {user?.profilePicture ? (
+              <Image 
+                source={{ uri: user.profilePicture }} 
+                style={styles.profileImage}
+                defaultSource={require('../assets/profile.jpg')}
+              />
+            ) : (
+              <Image 
+                source={require('../assets/profile.jpg')} 
+                style={styles.profileImage}
+              />
+            )}
+            {user?.verificationBadge && (
+              <View style={styles.verificationBadge}>
+                <Ionicons name="checkmark" size={12} color="#fff" />
+              </View>
+            )}
           </View>
-        </View>
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Urban Fix</Text>
         <Pressable style={styles.headerRight} accessibilityRole="button" onPress={() => {}}>
           <Ionicons name="notifications-outline" size={22} color="#000" />
@@ -53,6 +77,18 @@ export default function UserHomepage() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        {/* User Greeting */}
+        {user && (
+          <View style={styles.greetingSection}>
+            <Text style={styles.greetingText}>
+              Hello, {user.fname || 'User'}! 👋
+            </Text>
+            <Text style={styles.greetingSubtext}>
+              Welcome back to UrbanFix
+            </Text>
+          </View>
+        )}
+
         {/* Search */}
         <View style={styles.searchBar}>
           <Ionicons name="search" size={18} color="#8e8e8e" />
@@ -164,18 +200,55 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 12,
   },
-  headerLeft: { width: 36, height: 36, justifyContent: 'center' },
+  headerLeft: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
   headerRight: { width: 36, height: 36, alignItems: 'flex-end', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#111' },
   avatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#e5e7eb',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
   },
   avatarText: { fontWeight: '700', color: '#111' },
+  profileImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  verificationBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#1DA1F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+
+  greetingSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  greetingText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  greetingSubtext: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '400',
+  },
 
   searchBar: {
     marginHorizontal: 16,

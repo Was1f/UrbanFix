@@ -35,7 +35,10 @@
         }
       ]
     ],
-    "extra": {},
+    "extra": {
+      "apiUrlDev": "http://localhost:5000",
+      "apiUrlProd": "http://localhost:5000"
+    },
     "experiments": {
       "typedRoutes": true
     }

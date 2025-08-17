@@ -2,11 +2,31 @@ import React, { useEffect, useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, ScrollView, Switch, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import API_URL from "../config/api";
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { apiUrl } from '../constants/api';
 
 export default function EditProfileScreen({ navigation, route }) {
-  const { updateUser } = useContext(AuthContext); // update context
-  const { userId } = route.params;
+  const { updateUser, user: contextUser } = useContext(AuthContext);
+  const router = useRouter();
+  const localParams = useLocalSearchParams();
+  
+  // Get userId from multiple sources with fallbacks
+  const getUserId = () => {
+    if (route?.params?.userId) return route.params.userId;
+    if (localParams?.userId) return localParams.userId;
+    if (contextUser?._id) return contextUser._id;
+    
+    // Try to get from URL parameters if on web
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlUserId = urlParams.get('userId');
+      if (urlUserId) return urlUserId;
+    }
+    
+    return null;
+  };
+  
+  const userId = getUserId();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,9 +46,15 @@ export default function EditProfileScreen({ navigation, route }) {
   // Fetch user data
   useEffect(() => {
     const fetchUser = async () => {
+      if (!userId) {
+        setLoading(false);
+        Alert.alert('Error', 'No user ID provided. Unable to load profile for editing.');
+        return;
+      }
+      
       setLoading(true);
       try {
-        const res = await axios.get(`${API_URL}/api/user/${userId}`);
+        const res = await axios.get(apiUrl(`/api/user/${userId}`));
         const userData = res.data;
         setUser(userData);
 
@@ -67,7 +93,7 @@ export default function EditProfileScreen({ navigation, route }) {
       verificationBadge: verifyProfile,
     };
 
-    const res = await axios.put(`${API_URL}/api/user/${userId}`, updates);
+    const res = await axios.put(apiUrl(`/api/user/${userId}`), updates);
 
     setUser(res.data);       // update local state
     updateUser(res.data);    // update context
@@ -87,7 +113,7 @@ export default function EditProfileScreen({ navigation, route }) {
     try {
       // For demo, just using a placeholder NID string
       const nid = '1234567890';
-      const res = await axios.patch(`${API_URL}/api/user/${userId}/nid`, { nid });
+      const res = await axios.patch(apiUrl(`/api/user/${userId}/nid`), { nid });
 
       setUser(res.data.user);
       updateUser(res.data.user);
@@ -98,6 +124,48 @@ export default function EditProfileScreen({ navigation, route }) {
     }
   };
 
+  // Show error if no userId is available
+  if (!userId) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => {
+            if (navigation?.goBack) {
+              navigation.goBack();
+            } else if (router?.back) {
+              router.back();
+            } else if (typeof window !== 'undefined') {
+              window.history.back();
+            }
+          }}>
+            <Text style={styles.headerBtn}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Profile</Text>
+          <View style={styles.headerBtn} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ textAlign: 'center', fontSize: 16, color: 'red', marginBottom: 20 }}>
+            No user ID provided. Cannot load profile for editing.
+          </Text>
+          <TouchableOpacity 
+            style={[styles.saveBtn, { backgroundColor: '#666' }]}
+            onPress={() => {
+              if (navigation?.goBack) {
+                navigation.goBack();
+              } else if (router?.back) {
+                router.back();
+              } else if (typeof window !== 'undefined') {
+                window.history.back();
+              }
+            }}
+          >
+            <Text style={{ color: 'white', fontWeight: 'bold' }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   if (loading) return <ActivityIndicator size="large" color="#6b48ff" style={{ marginTop: 20 }} />;
   if (!user) return <Text style={{ textAlign: 'center', marginTop: 20 }}>User not found</Text>;
 
@@ -105,7 +173,15 @@ export default function EditProfileScreen({ navigation, route }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => {
+          if (navigation?.goBack) {
+            navigation.goBack();
+          } else if (router?.back) {
+            router.back();
+          } else if (typeof window !== 'undefined') {
+            window.history.back();
+          }
+        }}>
           <Text style={styles.headerBtn}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>

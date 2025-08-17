@@ -2,6 +2,54 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 
+// Create new user
+router.post('/', async (req, res) => {
+  const { fname, lname, phone, email, address, profession, gender } = req.body;
+  
+  if (!fname || !lname || !phone) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'First name, last name, and phone number are required' 
+    });
+  }
+
+  try {
+    // Check if phone already exists
+    const existingUser = await User.findOne({ phone });
+    if (existingUser) {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Phone number already registered' 
+      });
+    }
+
+    // Create new user
+    const newUser = new User({
+      fname,
+      lname,
+      phone,
+      email,
+      address,
+      profession,
+      gender
+    });
+
+    const savedUser = await newUser.save();
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      _id: savedUser._id,
+      user: savedUser
+    });
+  } catch (err) {
+    console.error('User creation error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error during user creation' 
+    });
+  }
+});
+
 // Get user profile by ID
 router.get('/:id', async (req, res) => {
   const userId = req.params.id;
