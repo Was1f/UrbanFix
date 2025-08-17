@@ -1,12 +1,13 @@
-// server.js
 const express = require('express');
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
 const cors = require('cors');
 const os = require('os');
 const path = require('path');
 
-dotenv.config();
+// Models
+const User = require('./models/User');
+const Post = require('./models/Post');
+const Report = require('./models/Report');
 
 const app = express();
 
