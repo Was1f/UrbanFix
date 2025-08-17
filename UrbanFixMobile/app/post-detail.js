@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Audio } from 'expo-av';
+import { Audio } from 'expo-audio';
 import { apiUrl } from '../constants/api';
 
 const PostDetail = () => {
@@ -757,7 +757,6 @@ const styles = StyleSheet.create({
   postImage: {
     width: '100%',
     height: 200,
-    resizeMode: 'cover',
   },
   postContent: {
     padding: 16,

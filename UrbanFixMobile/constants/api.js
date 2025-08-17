@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 // 1) app.json → expo.expoConfig.extra.apiUrl
 // 2) EXPO_PUBLIC_API_URL env var
 // 3) Fallback (current hardcoded LAN URL)
-const FALLBACK_API_BASE_URL = 'http://192.168.0.130:5000';
+const FALLBACK_API_BASE_URL = 'http://192.168.10.115:5000';
 
 export const API_BASE_URL =
   (Constants?.expoConfig?.extra && Constants.expoConfig.extra.apiUrl) ||

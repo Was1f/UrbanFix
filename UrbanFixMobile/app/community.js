@@ -453,7 +453,7 @@ const CommunityHome = () => {
                 {!!d.location && <Text style={styles.locationText}>📍 {d.location}</Text>}
               </View>
 
-              {d.image && <Image source={{ uri: d.image }} style={styles.discussionImage} />}
+              {d.image && <Image source={{ uri: d.image }} style={styles.discussionImage} resizeMode="cover" />}
 
               <View style={styles.discussionContent}>
                 <Text style={styles.discussionTitle}>{d.title}</Text>
@@ -685,7 +685,6 @@ const styles = StyleSheet.create({
   discussionImage: {
     width: '100%',
     height: 200,
-    resizeMode: 'cover',
   },
   discussionContent: {
     padding: 16,
