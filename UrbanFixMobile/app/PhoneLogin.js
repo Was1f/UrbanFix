@@ -3,10 +3,12 @@ import {
   View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, Animated, KeyboardAvoidingView, Platform 
 } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
+import { useRouter } from 'expo-router';
 import { apiUrl } from "../constants/api";
 
 export default function PhoneLogin() {
   const { login } = useContext(AuthContext);
+  const router = useRouter();
 
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -87,10 +89,36 @@ export default function PhoneLogin() {
         return;
       }
 
-      // ✅ Save user in context (no manual navigation)
-      login(data.user);
+      console.log('✅ OTP verified successfully for:', phone);
+      console.log('📄 User data received:', data.user);
 
-      // No navigation.replace here; AppNavigator will automatically render Home
+      // ✅ Save user in context with session management and navigate
+      try {
+        const loginSuccess = await login(data.user);
+        if (loginSuccess) {
+          console.log('✅ User session stored successfully');
+          
+          // Show success alert and navigate to user dashboard
+          Alert.alert(
+            'Login Successful! 🎉',
+            'Welcome to UrbanFix. Taking you to your dashboard...',
+            [
+              {
+                text: 'Continue',
+                onPress: () => {
+                  console.log('🚀 Navigating to user dashboard...');
+                  // Navigate to user-homepage explicitly
+                  router.replace('/user-homepage');
+                }
+              }
+            ]
+          );
+        }
+      } catch (loginError) {
+        console.error('❌ Failed to store user session:', loginError);
+        setError('Failed to save login session. Please try again.');
+        return;
+      }
     } catch (err) {
       console.error('Login failed:', err);
       setError('Failed to log in.');

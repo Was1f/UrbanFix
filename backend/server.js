@@ -26,6 +26,7 @@ const moderationRoutes = require('./routes/moderation');
 const uploadRouter = require('./routes/upload');
 const emergencyReportRoutes = require('./routes/emergency-reports');
 const emergencyContactRoutes = require('./routes/emergency-contacts');
+const announcementRoutes = require('./routes/announcements');
 
 // ===== Use Routes =====
 app.use('/api/boards', boardRoutes);
@@ -34,6 +35,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/emergency-reports', emergencyReportRoutes);
 app.use('/api/emergency-contacts', emergencyContactRoutes);
+app.use('/api/announcements', announcementRoutes);
 app.use('/api/upload', uploadRouter);
 
 // ===== Health check endpoint =====
@@ -54,6 +56,7 @@ app.get('/community', (req, res) => {
       '/api/discussions', 
       '/api/emergency-reports',
       '/api/emergency-contacts',
+      '/api/announcements',
       '/api/admin',
       '/api/moderation'
     ]

@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiUrl } from '../constants/api';
+import UserProtectedRoute from '../components/UserProtectedRoute';
 
 const { width } = Dimensions.get('window');
 
@@ -350,9 +351,17 @@ const CommunityHome = () => {
   }
 
   return (
-    <SafeAreaView style={styles.page}>
+    <UserProtectedRoute>
+      <SafeAreaView style={styles.page}>
       <View style={styles.headerBar}>
-        <View style={styles.headerSideSpacer} />
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
+          onPress={() => router.push('/user-homepage')}
+        >
+          <Text style={styles.backButtonText}>← Back</Text>
+        </Pressable>
         <Text style={styles.headerTitle}>UrbanFix Community</Text>
         <Pressable
           accessibilityRole="button"
@@ -521,7 +530,8 @@ const CommunityHome = () => {
       <Pressable style={({ pressed }) => [styles.fab, pressed && { backgroundColor: '#187bcd' }]} onPress={() => router.push('/create-post')}>
         <Text style={styles.fabText}>＋</Text>
       </Pressable>
-    </SafeAreaView>
+      </SafeAreaView>
+    </UserProtectedRoute>
   );
 };
 
@@ -545,7 +555,6 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 12,
   },
-  headerSideSpacer: { width: 72 },
   headerTitle: {
     flex: 1,
     fontSize: 22,
@@ -553,11 +562,23 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
+  backButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    minWidth: 72,
+  },
+  backButtonText: {
+    color: '#1e90ff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   adminButton: {
     backgroundColor: '#1e90ff',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    minWidth: 72,
   },
   adminButtonText: {
     color: '#fff',

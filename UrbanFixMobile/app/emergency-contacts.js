@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { apiUrl } from '../constants/api';
+import UserProtectedRoute from '../components/UserProtectedRoute';
 
 export default function EmergencyContacts() {
   const router = useRouter();
@@ -266,7 +267,8 @@ export default function EmergencyContacts() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <UserProtectedRoute>
+      <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -331,6 +333,7 @@ export default function EmergencyContacts() {
         </View>
       </ScrollView>
     </SafeAreaView>
+    </UserProtectedRoute>
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,40 +8,214 @@ import {
   Pressable,
   Image,
   TouchableOpacity,
+  FlatList,
+  Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { apiUrl } from '../constants/api';
+import SessionManager from '../utils/sessionManager';
+import UserProtectedRoute from '../components/UserProtectedRoute';
+
+const { width } = Dimensions.get('window');
 
 export default function UserHomepage() {
   const router = useRouter();
-  const { user } = useContext(AuthContext);
+  const { user, checkSessionValidity, logout } = useContext(AuthContext);
   const [communityItems, setCommunityItems] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
+  const announcementFlatListRef = useRef(null);
+  const [lastAnnouncementCheck, setLastAnnouncementCheck] = useState(null);
+
+  // Immediate authentication check on component mount
+  useEffect(() => {
+    const checkAuthOnMount = async () => {
+      console.log('🔒 [UserHomepage] Checking authentication on mount...');
+      
+      // Check if user exists
+      if (!user) {
+        console.log('🔒 [UserHomepage] No user found, redirecting to login');
+        router.replace('/PhoneLogin');
+        return;
+      }
+
+      // Check if session is valid
+      const isValid = await checkSessionValidity();
+      if (!isValid) {
+        console.log('🔒 [UserHomepage] Session invalid, redirecting to login');
+        // checkSessionValidity will handle logout and routing
+        return;
+      }
+
+      console.log('✅ [UserHomepage] Authentication check passed');
+    };
+
+    checkAuthOnMount();
+  }, []); // Empty dependency array to run only on mount
+
+  // Watch for user state changes (like logout)
+  useEffect(() => {
+    if (!user) {
+      console.log('🔒 [UserHomepage] User state changed to null, redirecting to login');
+      router.replace('/PhoneLogin');
+    }
+  }, [user, router]);
 
   useEffect(() => {
     let isMounted = true;
-    const load = async () => {
+    const loadData = async () => {
       try {
-        const res = await fetch(apiUrl('/api/discussions'));
-        const data = await res.json();
-        if (!isMounted) return;
-        setCommunityItems(Array.isArray(data) ? data.slice(0, 3) : []);
+        // Load discussions
+        const discussionsRes = await fetch(apiUrl('/api/discussions'));
+        const discussionsData = await discussionsRes.json();
+        if (isMounted) {
+          setCommunityItems(Array.isArray(discussionsData) ? discussionsData.slice(0, 3) : []);
+        }
       } catch (e) {
         if (isMounted) setCommunityItems([]);
       } finally {
         if (isMounted) setLoading(false);
       }
     };
-    load();
+
+    const loadAnnouncementsInitial = async () => {
+      try {
+        const announcementsRes = await fetch(apiUrl('/api/announcements'));
+        const announcementsData = await announcementsRes.json();
+        if (isMounted) {
+          const newAnnouncements = Array.isArray(announcementsData) ? announcementsData : [];
+          setAnnouncements(newAnnouncements);
+          setLastAnnouncementCheck(new Date().toISOString());
+        }
+      } catch (e) {
+        console.warn('Failed to load announcements:', e);
+        if (isMounted) setAnnouncements([]);
+      } finally {
+        if (isMounted) setAnnouncementsLoading(false);
+      }
+    };
+
+    loadData();
+    loadAnnouncementsInitial();
+    
     return () => {
       isMounted = false;
     };
   }, []);
 
+  // Use focus effect to check session validity and new announcements when returning to this screen
+  useFocusEffect(
+    React.useCallback(() => {
+      const validateSessionAndLoadData = async () => {
+        // Check if session is still valid
+        const isSessionValid = await checkSessionValidity();
+        if (!isSessionValid) {
+          console.log('🔄 Session expired in user homepage, logout will handle routing');
+          // logout method will handle both session clearing and routing to login
+          return;
+        }
+
+        // Refresh session timestamp to keep it active
+        await SessionManager.refreshUserSession();
+
+        // Load announcements if this isn't the first load
+        if (lastAnnouncementCheck) {
+          loadAnnouncements(true); // Show notification for new announcements
+        }
+      };
+
+      validateSessionAndLoadData();
+    }, [lastAnnouncementCheck, checkSessionValidity, logout, router])
+  );
+
+  const loadAnnouncements = async (showNotification = false) => {
+    try {
+      const announcementsRes = await fetch(apiUrl('/api/announcements'));
+      const announcementsData = await announcementsRes.json();
+      const newAnnouncements = Array.isArray(announcementsData) ? announcementsData : [];
+      
+      // Check for new announcements
+      if (showNotification && lastAnnouncementCheck && newAnnouncements.length > 0) {
+        const newAnnouncementsSinceLastCheck = newAnnouncements.filter(
+          announcement => new Date(announcement.createdAt) > new Date(lastAnnouncementCheck)
+        );
+        
+        if (newAnnouncementsSinceLastCheck.length > 0) {
+          const latestAnnouncement = newAnnouncementsSinceLastCheck[0];
+          Alert.alert(
+            '🔔 New Announcement',
+            `${latestAnnouncement.title}`,
+            [
+              { text: 'View', onPress: () => router.push('/announcements-list') },
+              { text: 'Dismiss', style: 'cancel' }
+            ]
+          );
+        }
+      }
+      
+      setAnnouncements(newAnnouncements);
+      setLastAnnouncementCheck(new Date().toISOString());
+    } catch (e) {
+      console.warn('Failed to load announcements:', e);
+      setAnnouncements([]);
+    }
+  };
+
+  const getDefaultImageForType = (type) => {
+    // Map announcement types to default images
+    const typeImageMap = {
+      'Power Outage': require('../assets/announcement/default.png'),
+      'Government Declaration': require('../assets/announcement/default.png'),
+      'Flood Warning': require('../assets/announcement/default.png'),
+      'Emergency Alert': require('../assets/announcement/default.png'),
+      'Public Service': require('../assets/announcement/default.png'),
+      'Infrastructure': require('../assets/announcement/default.png'),
+      'Health Advisory': require('../assets/announcement/default.png'),
+      'Transportation': require('../assets/announcement/default.png'),
+      'Weather Alert': require('../assets/announcement/default.png'),
+      'Community Event': require('../assets/announcement/default.png'),
+      'Other': require('../assets/announcement/default.png'),
+    };
+    
+    return typeImageMap[type] || require('../assets/placeholder.png');
+  };
+
+  const renderAnnouncementCard = ({ item }) => {
+    const imageUrl = item.image ? apiUrl(item.image) : null;
+    const announcementType = item.finalType || item.customType || item.type;
+    
+    return (
+      <View style={styles.notificationCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.notifTitle}>{item.title}</Text>
+          {item.time && <Text style={styles.notifTime}>{item.time}</Text>}
+          <Text style={styles.notifType}>{announcementType}</Text>
+        </View>
+        {item.image ? (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.notifImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <Image
+            source={getDefaultImageForType(announcementType)}
+            style={styles.notifImage}
+            resizeMode="cover"
+          />
+        )}
+      </View>
+    );
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <UserProtectedRoute>
+      <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -96,18 +270,47 @@ export default function UserHomepage() {
         </View>
 
         {/* Important Updates / Notifications */}
-        <Text style={styles.sectionHeading}>Important Updates/Notifications</Text>
-        <View style={styles.notificationCard}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.notifTitle}>Power Outage Reported</Text>
-            <Text style={styles.notifTime}>4 PM - 5 PM</Text>
+        <TouchableOpacity onPress={() => router.push('/announcements-list')}>
+          <Text style={styles.sectionHeading}>Important Updates/Notifications</Text>
+        </TouchableOpacity>
+        
+        {announcementsLoading ? (
+          <View style={styles.notificationCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.notifTitle}>Loading announcements...</Text>
+            </View>
+            <Image
+              source={require('../assets/placeholder.png')}
+              style={styles.notifImage}
+              resizeMode="cover"
+            />
           </View>
-          <Image
-            source={require('../assets/placeholder.png')}
-            style={styles.notifImage}
-            resizeMode="cover"
+        ) : announcements.length > 0 ? (
+          <FlatList
+            ref={announcementFlatListRef}
+            data={announcements}
+            renderItem={renderAnnouncementCard}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item._id}
+            style={styles.announcementsList}
+            snapToInterval={width - 32}
+            decelerationRate="fast"
           />
-        </View>
+        ) : (
+          <View style={styles.notificationCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.notifTitle}>No announcements</Text>
+              <Text style={styles.notifTime}>Check back later</Text>
+            </View>
+            <Image
+              source={require('../assets/placeholder.png')}
+              style={styles.notifImage}
+              resizeMode="cover"
+            />
+          </View>
+        )}
 
         {/* Quick Actions */}
         <Text style={[styles.sectionHeading, { marginTop: 14 }]}>Quick Actions</Text>
@@ -187,6 +390,7 @@ export default function UserHomepage() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
+    </UserProtectedRoute>
   );
 }
 
@@ -285,10 +489,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    width: width - 32,
   },
   notifTitle: { fontWeight: '700', color: '#111', marginBottom: 4 },
-  notifTime: { color: '#6b7280', fontSize: 12 },
+  notifTime: { color: '#6b7280', fontSize: 12, marginBottom: 2 },
+  notifType: { color: '#3b82f6', fontSize: 10, fontWeight: '600', textTransform: 'uppercase' },
   notifImage: { width: 90, height: 60, borderRadius: 10 },
+  announcementsList: {
+    marginBottom: 10,
+  },
 
   quickGrid: {
     marginHorizontal: 16,

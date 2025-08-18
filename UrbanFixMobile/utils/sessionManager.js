@@ -5,6 +5,8 @@ const SESSION_KEYS = {
   ADMIN_USERNAME: 'admin_username',
   ADMIN_ROLE: 'admin_role',
   SESSION_TIMESTAMP: 'session_timestamp',
+  USER_DATA: 'user_data',
+  USER_SESSION_TIMESTAMP: 'user_session_timestamp',
 };
 
 const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; 
@@ -132,6 +134,122 @@ class SessionManager {
       return false;
     } catch (error) {
       console.error('❌ Error refreshing session:', error);
+      return false;
+    }
+  }
+
+  // USER SESSION METHODS
+
+  // Store user session data
+  static async storeUserSession(userData) {
+    try {
+      const sessionData = {
+        ...userData,
+        timestamp: Date.now(),
+      };
+      
+      // Store in AsyncStorage
+      await AsyncStorage.multiSet([
+        [SESSION_KEYS.USER_DATA, JSON.stringify(userData)],
+        [SESSION_KEYS.USER_SESSION_TIMESTAMP, Date.now().toString()],
+      ]);
+      
+      console.log('✅ User session stored successfully (AsyncStorage)');
+      return true;
+    } catch (error) {
+      console.error('❌ Error storing user session:', error);
+      return false;
+    }
+  }
+
+  // Get user session data
+  static async getUserSession() {
+    try {
+      const [userData, timestamp] = await AsyncStorage.multiGet([
+        SESSION_KEYS.USER_DATA,
+        SESSION_KEYS.USER_SESSION_TIMESTAMP,
+      ]);
+
+      if (!userData[1] || !timestamp[1]) {
+        return null;
+      }
+
+      // Check if session has expired
+      const sessionAge = Date.now() - parseInt(timestamp[1]);
+      if (sessionAge > SESSION_TIMEOUT) {
+        console.log('⚠️ User session expired, clearing...');
+        await this.clearUserSession();
+        return null;
+      }
+
+      return {
+        user: JSON.parse(userData[1]),
+        timestamp: parseInt(timestamp[1]),
+      };
+    } catch (error) {
+      console.error('❌ Error getting user session:', error);
+      return null;
+    }
+  }
+
+  // Check if user is logged in
+  static async isUserLoggedIn() {
+    const session = await this.getUserSession();
+    return session !== null;
+  }
+
+  // Get user data
+  static async getUserData() {
+    const session = await this.getUserSession();
+    return session ? session.user : null;
+  }
+
+  // Clear user session
+  static async clearUserSession() {
+    try {
+      // Clear from AsyncStorage
+      await AsyncStorage.multiRemove([
+        SESSION_KEYS.USER_DATA,
+        SESSION_KEYS.USER_SESSION_TIMESTAMP,
+      ]);
+      
+      console.log('✅ User session cleared successfully (AsyncStorage)');
+      return true;
+    } catch (error) {
+      console.error('❌ Error clearing user session:', error);
+      return false;
+    }
+  }
+
+  // Update user session data
+  static async updateUserSession(updatedUserData) {
+    try {
+      const session = await this.getUserSession();
+      if (session) {
+        // Update user data while keeping the same timestamp
+        await AsyncStorage.setItem(SESSION_KEYS.USER_DATA, JSON.stringify(updatedUserData));
+        console.log('✅ User session updated (AsyncStorage)');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('❌ Error updating user session:', error);
+      return false;
+    }
+  }
+
+  // Refresh user session timestamp
+  static async refreshUserSession() {
+    try {
+      const session = await this.getUserSession();
+      if (session) {
+        await AsyncStorage.setItem(SESSION_KEYS.USER_SESSION_TIMESTAMP, Date.now().toString());
+        console.log('✅ User session refreshed (AsyncStorage)');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('❌ Error refreshing user session:', error);
       return false;
     }
   }

@@ -1,12 +1,15 @@
 // Use a dynamic app config to avoid hardcoded API URLs in app.json
-// Reads EXPO_PUBLIC_API_URL and exposes it in extra.apiUrl
+// Reads from shared config file
+
+import sharedConfig from './config.js';
 
 export default ({ config }) => {
   return {
     ...config,
     extra: {
       ...(config.extra || {}),
-      apiUrl: process.env.EXPO_PUBLIC_API_URL,
+      apiUrlDev: process.env.EXPO_PUBLIC_API_URL || sharedConfig.apiUrlDev,
+      apiUrlProd: process.env.EXPO_PUBLIC_API_URL || sharedConfig.apiUrlProd,
     },
   };
 };

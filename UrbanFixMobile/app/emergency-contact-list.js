@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,15 +8,19 @@ import {
   Alert,
   ScrollView,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { apiUrl } from '../constants/api';
 
 export default function EmergencyContactList() {
   const router = useRouter();
   const { category } = useLocalSearchParams();
   
-  const [contacts, setContacts] = useState(getDummyContactsByCategory(category));
+  const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const categoryConfig = {
     'Fire Brigade': { 
@@ -46,6 +50,39 @@ export default function EmergencyContactList() {
   };
 
   const config = categoryConfig[category] || categoryConfig['Emergency'];
+
+  useEffect(() => {
+    fetchEmergencyContacts();
+  }, [category]);
+
+  const fetchEmergencyContacts = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch contacts by category if specified, otherwise get all
+      const endpoint = category 
+        ? `/api/emergency-contacts/category/${encodeURIComponent(category)}`
+        : '/api/emergency-contacts';
+      
+      const url = apiUrl(endpoint);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch contacts: ${response.status}`);
+      }
+      
+      const contactsData = await response.json();
+      setContacts(contactsData);
+    } catch (err) {
+      setError(err.message);
+      
+      // Fallback to dummy data if API fails
+      setContacts(getDummyContactsByCategory(category));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   function getDummyContactsByCategory(category) {
     const allContacts = {
@@ -276,6 +313,46 @@ export default function EmergencyContactList() {
       ]
     );
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.header, { backgroundColor: config.color }]}>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </Pressable>
+          <Text style={styles.headerTitle}>{config.title}</Text>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={config.color} />
+          <Text style={styles.loadingText}>Loading contacts...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && contacts.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.header, { backgroundColor: config.color }]}>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </Pressable>
+          <Text style={styles.headerTitle}>{config.title}</Text>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={styles.centered}>
+          <Ionicons name="warning" size={48} color="#ff6b6b" />
+          <Text style={styles.errorText}>Failed to load contacts</Text>
+          <Text style={styles.errorSubtext}>{error}</Text>
+          <Pressable style={styles.retryButton} onPress={fetchEmergencyContacts}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -540,6 +617,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ff6b6b',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 5,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#1e90ff',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

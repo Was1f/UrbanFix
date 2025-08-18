@@ -4,6 +4,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { apiUrl } from '../constants/api';
+import UserProtectedRoute from '../components/UserProtectedRoute';
 
 export default function EditProfileScreen({ navigation, route }) {
   const { updateUser, user: contextUser } = useContext(AuthContext);
@@ -127,7 +128,8 @@ export default function EditProfileScreen({ navigation, route }) {
   // Show error if no userId is available
   if (!userId) {
     return (
-      <View style={styles.container}>
+      <UserProtectedRoute>
+        <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => {
             if (navigation?.goBack) {
@@ -162,15 +164,26 @@ export default function EditProfileScreen({ navigation, route }) {
             <Text style={{ color: 'white', fontWeight: 'bold' }}>Go Back</Text>
           </TouchableOpacity>
         </View>
-      </View>
+        </View>
+      </UserProtectedRoute>
     );
   }
 
-  if (loading) return <ActivityIndicator size="large" color="#6b48ff" style={{ marginTop: 20 }} />;
-  if (!user) return <Text style={{ textAlign: 'center', marginTop: 20 }}>User not found</Text>;
+  if (loading) return (
+    <UserProtectedRoute>
+      <ActivityIndicator size="large" color="#6b48ff" style={{ marginTop: 20 }} />
+    </UserProtectedRoute>
+  );
+  
+  if (!user) return (
+    <UserProtectedRoute>
+      <Text style={{ textAlign: 'center', marginTop: 20 }}>User not found</Text>
+    </UserProtectedRoute>
+  );
 
   return (
-    <View style={styles.container}>
+    <UserProtectedRoute>
+      <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => {
@@ -249,6 +262,7 @@ export default function EditProfileScreen({ navigation, route }) {
         </TouchableOpacity>
       </ScrollView>
     </View>
+    </UserProtectedRoute>
   );
 }
 

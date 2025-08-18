@@ -253,9 +253,17 @@ export default function AdminDashboard() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => Alert.alert('Coming Soon', 'This feature will be available soon!')}
+              onPress={() => {
+                if (session?.token) {
+                  router.push('/admin-announcements');
+                } else {
+                  Alert.alert('Authentication Required', 'Please login again to access this feature.', [
+                    { text: 'OK', onPress: () => router.replace('/admin-login') }
+                  ]);
+                }
+              }}
             >
-              <Text style={styles.actionButtonText}>Send Announcement</Text>
+              <Text style={styles.actionButtonText}>Manage Announcements</Text>
             </TouchableOpacity>
           </View>
         </View>

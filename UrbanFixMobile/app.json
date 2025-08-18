@@ -16,6 +16,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "usesCleartextTraffic": true,
       "edgeToEdgeEnabled": true
     },
     "web": {
@@ -36,8 +37,6 @@
       ]
     ],
     "extra": {
-      "apiUrlDev": "http://localhost:5000",
-      "apiUrlProd": "http://localhost:5000"
     },
     "experiments": {
       "typedRoutes": true
