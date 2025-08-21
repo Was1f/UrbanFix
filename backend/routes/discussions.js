@@ -2,6 +2,12 @@ const express = require('express');
 const router = express.Router();
 const Discussion = require('../models/Discussion');
 const Board = require('../models/Board');
+const mongoose = require('mongoose');
+
+// Helper function to validate ObjectId
+const isValidObjectId = (id) => {
+  return id && mongoose.Types.ObjectId.isValid(id) && id !== 'undefined' && id !== 'null';
+};
 
 // Get all discussions or filter by location
 router.get('/', async (req, res) => {
@@ -16,6 +22,7 @@ router.get('/', async (req, res) => {
     const discussions = await Discussion.find(query).sort({ createdAt: -1 });
     res.json(discussions);
   } catch (error) {
+    console.error('Error fetching discussions:', error);
     res.status(500).json({ message: 'Error fetching discussions' });
   }
 });
@@ -23,12 +30,20 @@ router.get('/', async (req, res) => {
 // Get specific discussion by ID
 router.get('/:id', async (req, res) => {
   try {
-    const discussion = await Discussion.findById(req.params.id);
+    const { id } = req.params;
+    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
     if (!discussion) {
       return res.status(404).json({ message: 'Discussion not found' });
     }
     res.json(discussion);
   } catch (error) {
+    console.error('Error fetching discussion:', error);
     res.status(500).json({ message: 'Error fetching discussion' });
   }
 });
@@ -37,7 +52,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { 
-      title, description, type, author, location, image, audio,
+      title, description, type, author, location, image, audio, priority,
       // Poll fields
       pollOptions, pollPrivate,
       // Event fields
@@ -61,7 +76,10 @@ router.post('/', async (req, res) => {
       author: author || "Anonymous",
       location,
       image,
-      audio
+      audio,
+      priority: priority || 'normal',
+      likes: [],
+      likeCount: 0
     };
 
     // Add type-specific fields
@@ -94,6 +112,12 @@ router.post('/', async (req, res) => {
       discussionData.volunteers = [];
       discussionData.volunteerCount = 0;
     }
+
+    if (type === 'Report') {
+      discussionData.helpers = [];
+      discussionData.helperCount = 0;
+      discussionData.helpNeeded = true;
+    }
     
     const newDiscussion = new Discussion(discussionData);
     const saved = await newDiscussion.save();
@@ -119,11 +143,59 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Like/Unlike post
+router.post('/:id/like', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username = 'Anonymous' } = req.body;
+    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
+    if (!discussion) {
+      return res.status(404).json({ message: 'Discussion not found' });
+    }
+
+    // Initialize likes array if it doesn't exist
+    if (!discussion.likes) {
+      discussion.likes = [];
+    }
+
+    const userIndex = discussion.likes.indexOf(username);
+    
+    if (userIndex > -1) {
+      // User already liked, so unlike
+      discussion.likes.splice(userIndex, 1);
+    } else {
+      // User hasn't liked, so add like
+      discussion.likes.push(username);
+    }
+    
+    discussion.likeCount = discussion.likes.length;
+    await discussion.save();
+    
+    res.json(discussion);
+  } catch (error) {
+    console.error('Error liking discussion:', error);
+    res.status(500).json({ message: 'Error processing like' });
+  }
+});
+
 // Vote on poll
 router.post('/:id/vote', async (req, res) => {
   try {
+    const { id } = req.params;
     const { option, previousVote, username = 'Anonymous' } = req.body;
-    const discussion = await Discussion.findById(req.params.id);
+    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
     
     if (!discussion || discussion.type !== 'Poll') {
       return res.status(404).json({ message: 'Poll not found' });
@@ -155,8 +227,15 @@ router.post('/:id/vote', async (req, res) => {
 // RSVP to event or volunteer
 router.post('/:id/rsvp', async (req, res) => {
   try {
+    const { id } = req.params;
     const { username = 'Anonymous' } = req.body;
-    const discussion = await Discussion.findById(req.params.id);
+    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
     
     if (!discussion || !['Event', 'Volunteer'].includes(discussion.type)) {
       return res.status(404).json({ message: 'Event or volunteer opportunity not found' });
@@ -185,8 +264,15 @@ router.post('/:id/rsvp', async (req, res) => {
 // Cancel RSVP
 router.post('/:id/cancel-rsvp', async (req, res) => {
   try {
+    const { id } = req.params;
     const { username = 'Anonymous' } = req.body;
-    const discussion = await Discussion.findById(req.params.id);
+    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
     
     if (!discussion || !['Event', 'Volunteer'].includes(discussion.type)) {
       return res.status(404).json({ message: 'Event or volunteer opportunity not found' });
@@ -211,8 +297,15 @@ router.post('/:id/cancel-rsvp', async (req, res) => {
 // Make donation
 router.post('/:id/donate', async (req, res) => {
   try {
+    const { id } = req.params;
     const { amount, username = 'Anonymous' } = req.body;
-    const discussion = await Discussion.findById(req.params.id);
+    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
     
     if (!discussion || discussion.type !== 'Donation') {
       return res.status(404).json({ message: 'Donation campaign not found' });
@@ -238,11 +331,159 @@ router.post('/:id/donate', async (req, res) => {
   }
 });
 
+// Offer help for a report
+router.post('/:id/offer-help', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username = 'Anonymous' } = req.body;
+    
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
+    
+    if (!discussion || discussion.type !== 'Report') {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    // Check if user already offered help
+    const existingHelper = discussion.helpers.find(h => h.username === username);
+    if (existingHelper) {
+      return res.status(400).json({ message: 'You already offered to help' });
+    }
+
+    // Add helper
+    discussion.helpers.push({
+      username,
+      offeredAt: new Date(),
+      status: 'offered'
+    });
+    
+    discussion.helperCount = discussion.helpers.length;
+    await discussion.save();
+
+    // TODO: Add notification logic here
+    // await createNotification(discussion.author, `${username} offered to help with your report: ${discussion.title}`);
+
+    res.json(discussion);
+  } catch (error) {
+    console.error('Error offering help:', error);
+    res.status(500).json({ message: 'Error offering help' });
+  }
+});
+
+// Withdraw help offer
+router.post('/:id/withdraw-help', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username = 'Anonymous' } = req.body;
+    
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
+    
+    if (!discussion || discussion.type !== 'Report') {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    // Remove helper
+    discussion.helpers = discussion.helpers.filter(h => h.username !== username);
+    discussion.helperCount = discussion.helpers.length;
+    await discussion.save();
+
+    res.json(discussion);
+  } catch (error) {
+    console.error('Error withdrawing help:', error);
+    res.status(500).json({ message: 'Error withdrawing help' });
+  }
+});
+
+// Update helper status (for post author to accept/decline help)
+router.patch('/:id/helper/:helperId/status', async (req, res) => {
+  try {
+    const { id, helperId } = req.params;
+    const { status, authorUsername } = req.body;
+    
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+
+    if (!['offered', 'accepted', 'declined', 'completed'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+    
+    const discussion = await Discussion.findById(id);
+    
+    if (!discussion || discussion.type !== 'Report') {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    // Only the post author can update helper status
+    if (discussion.author !== authorUsername) {
+      return res.status(403).json({ message: 'Only the post author can update helper status' });
+    }
+
+    const helper = discussion.helpers.find(h => h._id.toString() === helperId);
+    if (!helper) {
+      return res.status(404).json({ message: 'Helper not found' });
+    }
+
+    helper.status = status;
+    await discussion.save();
+
+    res.json(discussion);
+  } catch (error) {
+    console.error('Error updating helper status:', error);
+    res.status(500).json({ message: 'Error updating helper status' });
+  }
+});
+
+// Mark report as resolved
+router.patch('/:id/resolve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { authorUsername } = req.body;
+    
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
+    
+    if (!discussion || discussion.type !== 'Report') {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    // Only the post author can mark as resolved
+    if (discussion.author !== authorUsername) {
+      return res.status(403).json({ message: 'Only the post author can mark as resolved' });
+    }
+
+    discussion.helpNeeded = false;
+    await discussion.save();
+
+    res.json(discussion);
+  } catch (error) {
+    console.error('Error resolving report:', error);
+    res.status(500).json({ message: 'Error resolving report' });
+  }
+});
+
 // Add comment
 router.post('/:id/comments', async (req, res) => {
   try {
+    const { id } = req.params;
     const { content, author = 'Anonymous' } = req.body;
-    const discussion = await Discussion.findById(req.params.id);
+    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
     
     if (!discussion) {
       return res.status(404).json({ message: 'Discussion not found' });
@@ -274,7 +515,14 @@ router.post('/:id/comments', async (req, res) => {
 // Get comments for a discussion
 router.get('/:id/comments', async (req, res) => {
   try {
-    const discussion = await Discussion.findById(req.params.id);
+    const { id } = req.params;
+    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
     
     if (!discussion) {
       return res.status(404).json({ message: 'Discussion not found' });
@@ -294,6 +542,15 @@ router.patch('/:discussionId/comments/:commentId', async (req, res) => {
   try {
     const { discussionId, commentId } = req.params;
     const { status } = req.body;
+
+    // Validate ObjectIds
+    if (!isValidObjectId(discussionId)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    if (!isValidObjectId(commentId)) {
+      return res.status(400).json({ message: 'Invalid comment ID' });
+    }
 
     if (!['active', 'flagged', 'removed'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
@@ -316,6 +573,43 @@ router.patch('/:discussionId/comments/:commentId', async (req, res) => {
   } catch (error) {
     console.error('Error updating comment status:', error);
     res.status(500).json({ message: 'Error updating comment status' });
+  }
+});
+
+// Delete discussion (only by author)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { author } = req.body;
+    
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid discussion ID' });
+    }
+    
+    const discussion = await Discussion.findById(id);
+    
+    if (!discussion) {
+      return res.status(404).json({ message: 'Discussion not found' });
+    }
+
+    // Only allow the author to delete their own post
+    if (discussion.author !== author) {
+      return res.status(403).json({ message: 'You can only delete your own posts' });
+    }
+
+    await Discussion.findByIdAndDelete(id);
+    
+    // Update board post count
+    const board = await Board.findOne({ title: discussion.location });
+    if (board && board.posts > 0) {
+      board.posts = board.posts - 1;
+      await board.save();
+    }
+
+    res.json({ message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting discussion:', error);
+    res.status(500).json({ message: 'Error deleting discussion' });
   }
 });
 

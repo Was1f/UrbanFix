@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+
+
 // Comment schema for nested comments
 const CommentSchema = new mongoose.Schema({
   content: { type: String, required: true },
@@ -25,6 +27,17 @@ const DiscussionSchema = new mongoose.Schema({
   time: { type: String, default: "Just now" },
   image: { type: String },
   audio: { type: String },
+  
+  // Priority field
+  priority: {
+    type: String,
+    default: 'normal',
+    enum: ['low', 'normal', 'medium', 'high', 'urgent']
+  },
+  
+  // Like system
+  likes: [{ type: String }], // Array of usernames who liked
+  likeCount: { type: Number, default: 0 },
   
   // Poll-specific fields
   pollOptions: [String],
@@ -69,9 +82,25 @@ const DiscussionSchema = new mongoose.Schema({
   flagCount: { 
     type: Number, 
     default: 0 
-  }
+  },
+
+    helpers: [{
+    username: String,
+    offeredAt: { type: Date, default: Date.now },
+    status: { 
+      type: String, 
+      default: 'offered', 
+      enum: ['offered', 'accepted', 'declined', 'completed'] 
+    }
+  }],
+  helperCount: { type: Number, default: 0 },
+  helpNeeded: { type: Boolean, default: true }, // Author can mark as resolved
 }, {
   timestamps: true
 });
+
+// Index for better performance
+DiscussionSchema.index({ location: 1, type: 1, priority: 1, createdAt: -1 });
+DiscussionSchema.index({ title: 'text', description: 'text' }); // For text search
 
 module.exports = mongoose.model('Discussion', DiscussionSchema);

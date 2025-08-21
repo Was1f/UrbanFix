@@ -1,41 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState,useContext } from 'react';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ScrollView,
   Switch,
   Image,
   ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { apiUrl } from '../constants/api';
-import uploadService from '../services/uploadService'; // Import our upload service
+import { AuthContext } from '../context/AuthContext';
 
 export default function CreatePost() {
   const router = useRouter();
+  const { user } = useContext(AuthContext);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('Report');
   const [location, setLocation] = useState('');
-  const [imageUri, setImageUri] = useState('');
-  const [audioUri, setAudioUri] = useState('');
+  const [priority, setPriority] = useState('normal');
+  const [selectedImage, setSelectedImage] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({});
 
   // Poll
   const [pollOptions, setPollOptions] = useState(['', '']);
   const [pollPrivate, setPollPrivate] = useState(false);
 
   // Event
-  const [eventDate, setEventDate] = useState(''); // YYYY-MM-DD
-  const [eventTime, setEventTime] = useState(''); // HH:MM
+  const [eventDate, setEventDate] = useState('');
+  const [eventTime, setEventTime] = useState('');
 
   // Donation
   const [goalAmount, setGoalAmount] = useState('');
@@ -52,144 +52,49 @@ export default function CreatePost() {
     'Jamalpur', 'Narsingdi'
   ];
 
-  const requestPermissions = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to select images!');
-      return false;
-    }
-    return true;
-  };
+  const postTypes = [
+    { value: 'Report', label: 'Report Issue', emoji: '⚠️', description: 'Report community problems' },
+    { value: 'Poll', label: 'Create Poll', emoji: '📊', description: 'Get community opinions' },
+    { value: 'Event', label: 'Organize Event', emoji: '📅', description: 'Plan community events' },
+    { value: 'Donation', label: 'Fundraise', emoji: '💝', description: 'Raise funds for causes' },
+    { value: 'Volunteer', label: 'Find Volunteers', emoji: '🤝', description: 'Recruit helpers' },
+  ];
 
-  const pickImageFromGallery = async () => {
-    const hasPermission = await requestPermissions();
-    if (!hasPermission) return;
+  const priorities = [
+    { value: 'low', label: 'Low Priority', color: '#22c55e', description: 'Can wait' },
+    { value: 'normal', label: 'Normal', color: '#6b7280', description: 'Standard priority' },
+    { value: 'medium', label: 'Medium Priority', color: '#eab308', description: 'Moderately urgent' },
+    { value: 'high', label: 'High Priority', color: '#f97316', description: 'Needs attention soon' },
+    { value: 'urgent', label: 'Urgent', color: '#ef4444', description: 'Immediate action needed' },
+  ];
 
+  const handleImagePicker = async () => {
     try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
-        allowsMultipleSelection: false,
       });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        setImageUri(asset.uri);
-        Alert.alert('Success', 'Image selected successfully!');
+      if (!result.canceled && result.assets[0]) {
+        setSelectedImage(result.assets[0]);
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image from gallery');
+      Alert.alert('Error', 'Failed to pick image');
     }
   };
 
-  const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Sorry, we need camera permissions to take photos!');
-      return;
-    }
-
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        setImageUri(asset.uri);
-        Alert.alert('Success', 'Photo taken successfully!');
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo');
-    }
-  };
-
-  const pickAudioFile = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'audio/*',
-        copyToCacheDirectory: true,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        
-        // Validate file size (max 50MB)
-        if (asset.size && asset.size > 50 * 1024 * 1024) {
-          Alert.alert('File Too Large', 'Audio file must be less than 50MB');
-          return;
-        }
-        
-        setAudioUri(asset.uri);
-        Alert.alert('Success', 'Audio file selected successfully!');
-      }
-    } catch (error) {
-      console.error('Error picking audio:', error);
-      Alert.alert('Error', 'Failed to pick audio file');
-    }
-  };
-  const testUpload = async () => {
-    try {
-      // Test with a simple fetch first
-      const testResponse = await fetch(apiUrl('/api/upload/single'), {
-        method: 'GET', // Just to test connectivity
-      });
-      console.log('Server connectivity test:', testResponse.status);
-      
-      // Then test actual image picking and upload
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 1,
-      });
-      
-      if (!result.canceled) {
-        console.log('Image picked:', result.assets[0]);
-        const uploadResult = await uploadService.uploadFile(result.assets[0].uri, 'image');
-        console.log('Upload result:', uploadResult);
-      }
-    } catch (error) {
-      console.error('Test upload error:', error);
-    }
-  };
-  const showImageOptions = () => {
-    Alert.alert(
-      'Select Image',
-      'Choose an option to add an image',
-      [
-        { text: 'Camera', onPress: takePhoto },
-        { text: 'Gallery', onPress: pickImageFromGallery },
-        { text: 'Remove Image', onPress: () => setImageUri(''), style: 'destructive' },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
-  };
-
-  const uploadFile = async (uri, fileType) => {
-    try {
-      // Validate file before upload
-      await uploadService.validateFile(uri, fileType);
-      
-      // Set up progress tracking
-      setUploadProgress(prev => ({ ...prev, [fileType]: 0 }));
-      
-      // Upload file using the service
-      const result = await uploadService.uploadFile(uri, fileType);
-      
-      setUploadProgress(prev => ({ ...prev, [fileType]: 100 }));
-      
-      return result.url; // Return the uploaded file URL
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploadProgress(prev => ({ ...prev, [fileType]: undefined }));
-      throw new Error(`Failed to upload ${fileType}: ${error.message}`);
-    }
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
   };
 
   const addPollOption = () => {
@@ -234,7 +139,6 @@ export default function CreatePost() {
         Alert.alert('Validation Error', 'Event date is required');
         return false;
       }
-      // Validate date format
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
       if (!dateRegex.test(eventDate.trim())) {
         Alert.alert('Validation Error', 'Event date must be in YYYY-MM-DD format');
@@ -265,42 +169,76 @@ export default function CreatePost() {
 
     try {
       setIsUploading(true);
-      setUploadProgress({});
 
-      // Upload files if they exist
       let uploadedImageUrl = '';
-      let uploadedAudioUrl = '';
 
-      if (imageUri) {
+      if (selectedImage) {
         try {
-          uploadedImageUrl = await uploadFile(imageUri, 'image');
-        } catch (error) {
-          Alert.alert('Upload Error', `Image upload failed: ${error.message}`);
-          return;
+          // Convert image to base64 following announcement pattern
+          const response = await fetch(selectedImage.uri);
+          const blob = await response.blob();
+          
+          // Convert blob to base64
+          const base64Promise = new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+          
+          const base64Data = await base64Promise;
+          
+          // Send as FormData with base64 (following announcement pattern)
+          const formDataToSend = new FormData();
+          formDataToSend.append('imageBase64', base64Data);
+          formDataToSend.append('imageFileName', selectedImage.fileName || `post-${Date.now()}.jpg`);
+          
+          const url = apiUrl('/api/upload/community');
+          
+          const uploadResponse = await fetch(url, {
+            method: 'POST',
+            body: formDataToSend,
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error('Failed to upload image');
+          }
+
+          const uploadResult = await uploadResponse.json();
+          uploadedImageUrl = uploadResult.imageUrl;
+        } catch (imageError) {
+          console.error('Image upload failed:', imageError);
+          
+          // Ask user if they want to continue without image
+          const continueWithoutImage = await new Promise((resolve) => {
+            Alert.alert(
+              'Image Upload Failed',
+              `${imageError.message}\n\nWould you like to continue without the image?`,
+              [
+                { text: 'Cancel', onPress: () => resolve(false) },
+                { text: 'Continue', onPress: () => resolve(true) }
+              ]
+            );
+          });
+          
+          if (!continueWithoutImage) {
+            return;
+          }
+          
+          uploadedImageUrl = '';
         }
       }
 
-      if (audioUri) {
-        try {
-          uploadedAudioUrl = await uploadFile(audioUri, 'audio');
-        } catch (error) {
-          Alert.alert('Upload Error', `Audio upload failed: ${error.message}`);
-          return;
-        }
-      }
-
-      // Common fields
       const postData = {
         title: title.trim(),
         description: description.trim(),
         type,
-        author: 'Anonymous', // In production, get from auth context
+        priority,
+        author: user ? `${user.fname} ${user.lname}` : 'Anonymous',
         location,
         ...(uploadedImageUrl && { image: uploadedImageUrl }),
-        ...(uploadedAudioUrl && { audio: uploadedAudioUrl }),
       };
 
-      // Type specifics
+      // Type-specific data
       if (type === 'Poll') {
         const validOptions = [...new Set(pollOptions.map(o => o.trim()).filter(Boolean))];
         postData.pollOptions = validOptions;
@@ -341,456 +279,673 @@ export default function CreatePost() {
       }
 
       Alert.alert('Success', 'Post created successfully!', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.push('/community') }
       ]);
     } catch (e) {
       console.error('Error posting:', e);
       Alert.alert('Error', e.message || 'Network or server error');
     } finally {
       setIsUploading(false);
-      setUploadProgress({});
     }
   };
 
-  const renderUploadProgress = (fileType) => {
-    const progress = uploadProgress[fileType];
-    if (progress === undefined) return null;
-    
-    return (
-      <View style={styles.progressContainer}>
-        <Text style={styles.progressText}>Uploading {fileType}... {progress}%</Text>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress}%` }]} />
-        </View>
-      </View>
-    );
-  };
+  const renderTypeSpecificFields = () => {
+    switch (type) {
+      case 'Poll':
+        return (
+          <View style={styles.typeSpecificSection}>
+            <Text style={styles.sectionTitle}>📊 Poll Configuration</Text>
+            <Text style={styles.sectionSubtitle}>Add options for people to vote on</Text>
+            
+            {pollOptions.map((option, index) => (
+              <View key={index} style={styles.pollOptionContainer}>
+                <TextInput
+                  style={[styles.input, styles.pollOptionInput]}
+                  placeholder={`Option ${index + 1}`}
+                  value={option}
+                  onChangeText={(value) => updatePollOption(index, value)}
+                />
+                {pollOptions.length > 2 && (
+                  <Pressable
+                    style={styles.removeOptionButton}
+                    onPress={() => removePollOption(index)}
+                  >
+                    <Text style={styles.removeOptionText}>✕</Text>
+                  </Pressable>
+                )}
+              </View>
+            ))}
+            
+            <Pressable style={styles.addOptionButton} onPress={addPollOption}>
+              <Text style={styles.addOptionText}>+ Add Option</Text>
+            </Pressable>
 
-  const renderPollFields = () => {
-    if (type !== 'Poll') return null;
-    return (
-      <View style={styles.typeSpecificSection}>
-        <Text style={styles.sectionTitle}>Poll Options</Text>
-        {pollOptions.map((option, index) => (
-          <View key={index} style={styles.pollOptionContainer}>
-            <TextInput
-              style={[styles.input, styles.pollOptionInput]}
-              placeholder={`Option ${index + 1}`}
-              value={option}
-              onChangeText={(value) => updatePollOption(index, value)}
-            />
-            {pollOptions.length > 2 && (
-              <TouchableOpacity
-                style={styles.removeOptionButton}
-                onPress={() => removePollOption(index)}
-              >
-                <Text style={styles.removeOptionText}>✕</Text>
-              </TouchableOpacity>
-            )}
+            <View style={styles.switchContainer}>
+              <View style={styles.switchInfo}>
+                <Text style={styles.switchLabel}>Private Results</Text>
+                <Text style={styles.switchDescription}>Hide results until poll ends</Text>
+              </View>
+              <Switch
+                value={pollPrivate}
+                onValueChange={setPollPrivate}
+                trackColor={{ false: '#cbd5e1', true: '#6366f1' }}
+                thumbColor={pollPrivate ? '#fff' : '#f4f3f4'}
+              />
+            </View>
           </View>
-        ))}
-        <TouchableOpacity style={styles.addOptionButton} onPress={addPollOption}>
-          <Text style={styles.addOptionText}>+ Add Option</Text>
-        </TouchableOpacity>
+        );
 
-        <View style={styles.switchContainer}>
-          <Text style={styles.switchLabel}>Keep results private</Text>
-          <Switch
-            value={pollPrivate}
-            onValueChange={setPollPrivate}
-            trackColor={{ false: '#767577', true: '#81b0ff' }}
-            thumbColor={pollPrivate ? '#1e90ff' : '#f4f3f4'}
-          />
-        </View>
-      </View>
-    );
-  };
+      case 'Event':
+        return (
+          <View style={styles.typeSpecificSection}>
+            <Text style={styles.sectionTitle}>📅 Event Details</Text>
+            <Text style={styles.sectionSubtitle}>When and where is your event?</Text>
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Event Date (YYYY-MM-DD) *"
+              value={eventDate}
+              onChangeText={setEventDate}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Event Time (HH:MM)"
+              value={eventTime}
+              onChangeText={setEventTime}
+            />
+          </View>
+        );
 
-  const renderEventFields = () => {
-    if (type !== 'Event') return null;
-    return (
-      <View style={styles.typeSpecificSection}>
-        <Text style={styles.sectionTitle}>Event Details</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Event Date (YYYY-MM-DD) *"
-          value={eventDate}
-          onChangeText={setEventDate}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Event Time (HH:MM)"
-          value={eventTime}
-          onChangeText={setEventTime}
-        />
-      </View>
-    );
-  };
+      case 'Donation':
+        return (
+          <View style={styles.typeSpecificSection}>
+            <Text style={styles.sectionTitle}>💝 Fundraising Campaign</Text>
+            <Text style={styles.sectionSubtitle}>Set your funding goals</Text>
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Goal Amount (BDT)"
+              value={goalAmount}
+              onChangeText={setGoalAmount}
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Starting Amount (BDT)"
+              value={currentAmount}
+              onChangeText={setCurrentAmount}
+              keyboardType="numeric"
+            />
+          </View>
+        );
 
-  const renderDonationFields = () => {
-    if (type !== 'Donation') return null;
-    return (
-      <View style={styles.typeSpecificSection}>
-        <Text style={styles.sectionTitle}>Donation Campaign Details</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Goal Amount (BDT)"
-          value={goalAmount}
-          onChangeText={setGoalAmount}
-          keyboardType="numeric"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Current Amount (BDT)"
-          value={currentAmount}
-          onChangeText={setCurrentAmount}
-          keyboardType="numeric"
-        />
-      </View>
-    );
-  };
+      case 'Volunteer':
+        return (
+          <View style={styles.typeSpecificSection}>
+            <Text style={styles.sectionTitle}>🤝 Volunteer Opportunity</Text>
+            <Text style={styles.sectionSubtitle}>What help do you need?</Text>
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Number of Volunteers Needed"
+              value={volunteersNeeded}
+              onChangeText={setVolunteersNeeded}
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Required Skills/Qualifications"
+              value={skills}
+              onChangeText={setSkills}
+            />
+          </View>
+        );
 
-  const renderVolunteerFields = () => {
-    if (type !== 'Volunteer') return null;
-    return (
-      <View style={styles.typeSpecificSection}>
-        <Text style={styles.sectionTitle}>Volunteer Campaign Details</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Number of Volunteers Needed"
-          value={volunteersNeeded}
-          onChangeText={setVolunteersNeeded}
-          keyboardType="numeric"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Required Skills/Qualifications"
-          value={skills}
-          onChangeText={setSkills}
-        />
-      </View>
-    );
+      default:
+        return null;
+    }
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.heading}>Create a New Post</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Title *"
-        value={title}
-        onChangeText={setTitle}
-      />
-
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder="Description"
-        value={description}
-        onChangeText={setDescription}
-        multiline
-        numberOfLines={4}
-      />
-
-      <View style={styles.pickerWrapper}>
-        <Text style={styles.label}>Post Type: *</Text>
-        <Picker
-          selectedValue={type}
-          style={styles.picker}
-          onValueChange={(itemValue) => setType(itemValue)}
+    <SafeAreaView style={styles.page}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => router.back()}
         >
-          <Picker.Item label="Report" value="Report" />
-          <Picker.Item label="Poll" value="Poll" />
-          <Picker.Item label="Event" value="Event" />
-          <Picker.Item label="Donation" value="Donation" />
-          <Picker.Item label="Volunteer" value="Volunteer" />
-        </Picker>
+          <Text style={styles.backIcon}>←</Text>
+        </Pressable>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Create Post</Text>
+          <Text style={styles.headerSubtitle}>Share with your community</Text>
+        </View>
+        <View style={styles.headerSpacer} />
       </View>
 
-      <View style={styles.pickerWrapper}>
-        <Text style={styles.label}>Location: *</Text>
-        <Picker
-          selectedValue={location}
-          style={styles.picker}
-          onValueChange={(itemValue) => setLocation(itemValue)}
-        >
-          <Picker.Item label="Select a location" value="" />
-          {locations.map((loc) => (
-            <Picker.Item key={loc} label={loc} value={loc} />
-          ))}
-        </Picker>
-      </View>
-
-      {renderPollFields()}
-      {renderEventFields()}
-      {renderDonationFields()}
-      {renderVolunteerFields()}
-
-      {/* Image Section */}
-      <View style={styles.mediaSection}>
-        <Text style={styles.label}>Image (Optional)</Text>
-        <TouchableOpacity style={styles.mediaButton} onPress={showImageOptions}>
-          <Text style={styles.mediaButtonText}>📷 Select Image or GIF</Text>
-        </TouchableOpacity>
-        {imageUri ? (
-          <View style={styles.imagePreview}>
-            <Image source={{ uri: imageUri }} style={styles.previewImage} />
-            <TouchableOpacity 
-              style={styles.removeMediaButton} 
-              onPress={() => setImageUri('')}
-            >
-              <Text style={styles.removeMediaText}>✕ Remove</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-        {renderUploadProgress('image')}
-      </View>
-
-      {/* Audio Section */}
-      <View style={styles.mediaSection}>
-        <Text style={styles.label}>Audio (Optional)</Text>
-        <TouchableOpacity style={styles.mediaButton} onPress={pickAudioFile}>
-          <Text style={styles.mediaButtonText}>🎵 Select Audio File</Text>
-        </TouchableOpacity>
-        {audioUri ? (
-          <View style={styles.audioPreview}>
-            <Text style={styles.audioPreviewText}>🎵 Audio file selected</Text>
-            <TouchableOpacity 
-              style={styles.removeMediaButton} 
-              onPress={() => setAudioUri('')}
-            >
-              <Text style={styles.removeMediaText}>✕ Remove</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-        {renderUploadProgress('audio')}
-      </View>
-
-      <TouchableOpacity 
-        style={[styles.button, isUploading && styles.buttonDisabled]} 
-        onPress={handleSubmit}
-        disabled={isUploading}
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {isUploading ? (
-          <View style={styles.uploadingContainer}>
-            <ActivityIndicator size="small" color="#fff" />
-            <Text style={[styles.buttonText, { marginLeft: 8 }]}>
-              {Object.keys(uploadProgress).length > 0 ? 'Uploading files...' : 'Creating Post...'}
-            </Text>
-          </View>
-        ) : (
-          <Text style={styles.buttonText}>Submit Post</Text>
-        )}
-      </TouchableOpacity>
+        {/* Post Type Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📝 What would you like to post?</Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.typeSelector}
+          >
+            {postTypes.map((postType) => (
+              <Pressable
+                key={postType.value}
+                style={[
+                  styles.typeCard,
+                  type === postType.value && styles.typeCardActive
+                ]}
+                onPress={() => setType(postType.value)}
+              >
+                <Text style={styles.typeEmoji}>{postType.emoji}</Text>
+                <Text style={[
+                  styles.typeLabel,
+                  type === postType.value && styles.typeLabelActive
+                ]}>
+                  {postType.label}
+                </Text>
+                <Text style={[
+                  styles.typeDescription,
+                  type === postType.value && styles.typeDescriptionActive
+                ]}>
+                  {postType.description}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>* Required fields</Text>
-        <Text style={styles.footerText}>Supported: Images (JPG, PNG, GIF), Audio (MP3, WAV, M4A)</Text>
-        <Text style={styles.footerText}>Max file size: 50MB</Text>
-      </View>
-    </ScrollView>
+        {/* Basic Information */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📋 Basic Information</Text>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Title *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="What's this about?"
+              value={title}
+              onChangeText={setTitle}
+              maxLength={100}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Description</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Provide more details..."
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={4}
+              maxLength={500}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Location *</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={location}
+                style={styles.picker}
+                onValueChange={(itemValue) => setLocation(itemValue)}
+              >
+                <Picker.Item label="Select your location" value="" />
+                {locations.map((loc) => (
+                  <Picker.Item key={loc} label={loc} value={loc} />
+                ))}
+              </Picker>
+            </View>
+          </View>
+        </View>
+
+        {/* Priority Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>⚡ Priority Level</Text>
+          <Text style={styles.sectionSubtitle}>How urgent is this?</Text>
+          
+          <View style={styles.priorityGrid}>
+            {priorities.map((priorityOption) => (
+              <Pressable
+                key={priorityOption.value}
+                style={[
+                  styles.priorityCard,
+                  priority === priorityOption.value && styles.priorityCardActive,
+                  { borderColor: priorityOption.color }
+                ]}
+                onPress={() => setPriority(priorityOption.value)}
+              >
+                <View style={[
+                  styles.priorityIndicator,
+                  { backgroundColor: priorityOption.color }
+                ]} />
+                <Text style={[
+                  styles.priorityLabel,
+                  priority === priorityOption.value && styles.priorityLabelActive
+                ]}>
+                  {priorityOption.label}
+                </Text>
+                <Text style={[
+                  styles.priorityDesc,
+                  priority === priorityOption.value && styles.priorityDescActive
+                ]}>
+                  {priorityOption.description}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Type-specific fields */}
+        {renderTypeSpecificFields()}
+
+        {/* Media Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📷 Add Image (Optional)</Text>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Image</Text>
+            {selectedImage ? (
+              <View style={styles.imageContainer}>
+                <Image source={{ uri: selectedImage.uri }} style={styles.selectedImage} />
+                <Pressable
+                  style={styles.removeImageButton}
+                  onPress={handleRemoveImage}
+                >
+                  <Text style={styles.removeImageIcon}>✕</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable style={styles.imagePickerButton} onPress={handleImagePicker}>
+                <Text style={styles.imagePickerIcon}>📷</Text>
+                <Text style={styles.imagePickerText}>Add Image</Text>
+                <Text style={styles.imagePickerSubtext}>Optional: Add an image to your post</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        {/* Submit Section */}
+        <View style={styles.submitSection}>
+          <Pressable 
+            style={[
+              styles.submitButton, 
+              isUploading && styles.submitButtonDisabled,
+              !title.trim() || !location ? styles.submitButtonDisabled : null
+            ]} 
+            onPress={handleSubmit}
+            disabled={isUploading || !title.trim() || !location}
+          >
+            {isUploading ? (
+              <View style={styles.uploadingContainer}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={[styles.submitButtonText, { marginLeft: 8 }]}>
+                  {selectedImage ? 'Uploading...' : 'Creating...'}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.submitButtonText}>✨ Create Post</Text>
+            )}
+          </Pressable>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>* Required fields</Text>
+            <Text style={styles.footerText}>Supported: JPG, PNG, GIF • Max file size: 10MB</Text>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    padding: 20, 
-    backgroundColor: '#f9f9f9', 
-    flex: 1 
+  page: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
   },
-  heading: { 
-    fontSize: 22, 
-    fontWeight: 'bold', 
-    marginBottom: 20, 
-    color: '#4b4b4b', 
-    textAlign: 'center' 
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
-  input: { 
-    borderColor: '#ccc', 
-    borderWidth: 1, 
-    padding: 12, 
-    borderRadius: 8, 
-    marginBottom: 15, 
-    backgroundColor: 'white' 
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  textArea: { 
-    height: 100, 
-    textAlignVertical: 'top' 
+  backIcon: {
+    fontSize: 18,
+    color: '#64748b',
   },
-  pickerWrapper: { 
-    marginBottom: 20 
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
   },
-  label: { 
-    marginBottom: 8, 
-    fontWeight: '500', 
-    color: '#333' 
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e293b',
   },
-  picker: { 
-    backgroundColor: 'white', 
-    borderColor: '#ccc', 
-    borderWidth: 1, 
-    borderRadius: 8, 
-    height: 50 
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
   },
-  typeSpecificSection: { 
-    marginBottom: 20, 
-    padding: 15, 
-    backgroundColor: '#f0f8ff', 
-    borderRadius: 8, 
-    borderWidth: 1, 
-    borderColor: '#1e90ff' 
+  headerSpacer: {
+    width: 40,
   },
-  sectionTitle: { 
-    fontSize: 16, 
-    fontWeight: '600', 
-    color: '#1e90ff', 
-    marginBottom: 10 
+
+  // Content
+  scrollView: {
+    flex: 1,
   },
-  pollOptionContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 10 
+  section: {
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  pollOptionInput: { 
-    flex: 1, 
-    marginBottom: 0, 
-    marginRight: 10 
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginBottom: 8,
   },
-  removeOptionButton: { 
-    backgroundColor: '#ff4444', 
-    width: 30, 
-    height: 30, 
-    borderRadius: 15, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 16,
   },
-  removeOptionText: { 
-    color: 'white', 
-    fontWeight: 'bold', 
-    fontSize: 16 
+
+  // Post Type Selection
+  typeSelector: {
+    marginHorizontal: -4,
   },
-  addOptionButton: { 
-    backgroundColor: '#1e90ff', 
-    padding: 10, 
-    borderRadius: 5, 
-    alignItems: 'center', 
-    marginBottom: 15 
+  typeCard: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 4,
+    width: 140,
+    alignItems: 'center',
   },
-  addOptionText: { 
-    color: 'white', 
-    fontWeight: '500' 
+  typeCardActive: {
+    borderColor: '#6366f1',
+    backgroundColor: '#f0f8ff',
   },
-  switchContainer: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center' 
+  typeEmoji: {
+    fontSize: 24,
+    marginBottom: 8,
   },
-  switchLabel: { 
-    fontSize: 14, 
-    color: '#333' 
+  typeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  mediaSection: {
+  typeLabelActive: {
+    color: '#6366f1',
+  },
+  typeDescription: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  typeDescriptionActive: {
+    color: '#6366f1',
+  },
+
+  // Input Groups
+  inputGroup: {
     marginBottom: 20,
   },
-  mediaButton: {
-    backgroundColor: '#e3f2fd',
-    borderWidth: 1,
-    borderColor: '#1e90ff',
-    borderStyle: 'dashed',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  mediaButtonText: {
-    color: '#1e90ff',
-    fontWeight: '500',
+  inputLabel: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 8,
   },
-  imagePreview: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 10,
-    alignItems: 'center',
-    marginBottom: 10,
+  input: {
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    fontSize: 16,
+    color: '#1e293b',
   },
-  previewImage: {
-    width: 200,
-    height: 150,
-    borderRadius: 8,
-    marginBottom: 10,
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
   },
-  audioPreview: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 15,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  audioPreviewText: {
-    color: '#333',
-    fontWeight: '500',
-  },
-  removeMediaButton: {
-    backgroundColor: '#ff4444',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  removeMediaText: {
-    color: 'white',
-    fontWeight: '500',
-    fontSize: 12,
-  },
-  progressContainer: {
-    marginBottom: 10,
-  },
-  progressText: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 5,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 2,
+  pickerWrapper: {
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
     overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#1e90ff',
-    borderRadius: 2,
+  picker: {
+    height: 50,
   },
-  button: { 
-    backgroundColor: '#1e90ff', 
-    paddingVertical: 14, 
-    borderRadius: 8, 
-    alignItems: 'center', 
-    marginBottom: 20 
+
+  // Priority Selection
+  priorityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
+  priorityCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#f8fafc',
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
   },
-  buttonText: { 
-    color: 'white', 
-    fontWeight: '600', 
-    fontSize: 16 
+  priorityCardActive: {
+    backgroundColor: '#f0f8ff',
+  },
+  priorityIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  priorityLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  priorityLabelActive: {
+    color: '#1e293b',
+  },
+  priorityDesc: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  priorityDescActive: {
+    color: '#64748b',
+  },
+
+  // Type-specific sections
+  typeSpecificSection: {
+    backgroundColor: '#f0f8ff',
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#6366f1',
+  },
+  pollOptionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pollOptionInput: {
+    flex: 1,
+    marginBottom: 0,
+    marginRight: 12,
+  },
+  removeOptionButton: {
+    backgroundColor: '#ef4444',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeOptionText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  addOptionButton: {
+    backgroundColor: '#6366f1',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addOptionText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  switchInfo: {
+    flex: 1,
+  },
+  switchLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  switchDescription: {
+    fontSize: 13,
+    color: '#64748b',
+  },
+
+  // Media Section Styles
+  imageContainer: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  selectedImage: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f3f4f6',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeImageIcon: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  imagePickerButton: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePickerIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  imagePickerText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  imagePickerSubtext: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+
+  // Submit Section
+  submitSection: {
+    margin: 20,
+    marginTop: 32,
+  },
+  submitButton: {
+    backgroundColor: '#6366f1',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#cbd5e1',
+  },
+  submitButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 18,
   },
   uploadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  footer: { 
-    alignItems: 'center', 
-    paddingBottom: 20 
+  footer: {
+    alignItems: 'center',
   },
-  footerText: { 
-    fontSize: 12, 
-    color: '#666', 
-    fontStyle: 'italic',
+  footerText: {
+    fontSize: 12,
+    color: '#94a3b8',
     textAlign: 'center',
     marginBottom: 4,
   },
 });
+
