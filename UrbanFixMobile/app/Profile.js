@@ -104,7 +104,16 @@ export default function Profile({ navigation }) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Profile Info */}
         <View style={styles.profileSection}>
-          <Image source={require('../assets/profile.jpg')} style={styles.profileImage} />
+          {/* Profile Picture - Use user's profile pic if available, otherwise default */}
+          <Image 
+            source={
+              loggedInUser.profilePic?.uri 
+                ? { uri: apiUrl(loggedInUser.profilePic.uri) }
+                : require('../assets/profile.jpg')
+            } 
+            style={styles.profileImage} 
+            defaultSource={require('../assets/profile.jpg')}
+          />
           <View style={styles.nameContainer}>
             <Text style={styles.name}>
               {loggedInUser.fname && loggedInUser.lname
@@ -115,8 +124,38 @@ export default function Profile({ navigation }) {
               <Ionicons name="checkmark-circle" size={24} color="#1DA1F2" style={{ marginLeft: 8 }} />
             )}
           </View>
-          <Text style={styles.profession}>{loggedInUser.profession}</Text>
+          <Text style={styles.profession}>{loggedInUser.occupation || loggedInUser.profession}</Text>
           <Text style={styles.address}>{loggedInUser.address}</Text>
+          
+          {/* Bio Section */}
+          {loggedInUser.bio && (
+            <View style={styles.bioSection}>
+              <Text style={styles.bioTitle}>About Me</Text>
+              <Text style={styles.bioText}>{loggedInUser.bio}</Text>
+            </View>
+          )}
+          
+          {/* Additional User Details */}
+          <View style={styles.detailsSection}>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Location:</Text>
+              <Text style={styles.detailValue}>{loggedInUser.location}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Phone:</Text>
+              <Text style={styles.detailValue}>{loggedInUser.phone}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Email:</Text>
+              <Text style={styles.detailValue}>{loggedInUser.email}</Text>
+            </View>
+            {loggedInUser.bloodGroup && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Blood Group:</Text>
+                <Text style={styles.detailValue}>{loggedInUser.bloodGroup}</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <TouchableOpacity
@@ -242,8 +281,52 @@ const styles = StyleSheet.create({
   address: { 
     color: '#6b7280', 
     textAlign: 'center', 
-    marginBottom: 24,
+    marginBottom: 16,
     fontSize: 14,
+  },
+  bioSection: {
+    width: '100%',
+    marginBottom: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  bioTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  bioText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 16,
+  },
+  detailsSection: {
+    width: '100%',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '400',
   },
   editBtn: {
     backgroundColor: '#1e90ff',

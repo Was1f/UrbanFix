@@ -17,6 +17,15 @@ const ReportSchema = new mongoose.Schema({
     type: String, 
     default: 'Anonymous' 
   },
+  // Add user information for the reported content author
+  reportedUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  reportedUsername: {
+    type: String,
+    default: 'Anonymous'
+  },
   status: { 
     type: String, 
     default: 'pending',

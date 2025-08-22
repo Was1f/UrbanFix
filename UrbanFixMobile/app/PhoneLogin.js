@@ -14,6 +14,8 @@ export default function PhoneLogin() {
   const [otp, setOtp] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
 
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const appNameOpacity = useRef(new Animated.Value(0)).current;
@@ -41,6 +43,7 @@ export default function PhoneLogin() {
       return;
     }
     setError('');
+    setOtpLoading(true);
 
     // Determine if input is email or phone
     const isEmail = identifier.includes('@');
@@ -57,11 +60,17 @@ export default function PhoneLogin() {
         setError(data.message || 'Identifier not registered.');
       } else {
         setShowOtpInput(true);
-        Alert.alert('OTP Sent', `Please check your ${isEmail ? 'email' : 'SMS'} for the OTP.`);
+                Alert.alert('OTP Sent', `Please check your ${isEmail ? 'email' : 'SMS'} for the OTP.`);
       }
     } catch (err) {
       console.error('Error sending OTP:', err);
-      setError('Server error. Please try again.');
+      if (err.message.includes('Network request failed')) {
+        setError('Network error. Please check your internet connection and try again.');
+      } else {
+        setError('Server error. Please try again.');
+      }
+    } finally {
+      setOtpLoading(false);
     }
   };
 
@@ -71,6 +80,7 @@ export default function PhoneLogin() {
       return;
     }
     setError('');
+    setLoading(true);
 
     const isEmail = identifier.includes('@');
 
@@ -101,7 +111,13 @@ export default function PhoneLogin() {
       }
     } catch (err) {
       console.error('Login failed:', err);
-      setError('Failed to log in.');
+      if (err.message.includes('Network request failed')) {
+        setError('Network error. Please check your internet connection and try again.');
+      } else {
+        setError('Failed to log in. Please try again.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -142,18 +158,30 @@ export default function PhoneLogin() {
 
       <Animated.View style={{ width: '100%', opacity: buttonOpacity }}>
         {!showOtpInput ? (
-          <TouchableOpacity style={styles.button} onPress={handleSendOtp}>
-            <Text style={styles.buttonText}>Get OTP</Text>
+          <TouchableOpacity 
+            style={[styles.button, otpLoading && styles.buttonDisabled]} 
+            onPress={handleSendOtp}
+            disabled={otpLoading}
+          >
+            <Text style={styles.buttonText}>
+              {otpLoading ? 'Sending OTP...' : 'Get OTP'}
+            </Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.button} onPress={handleVerifyOtp}>
-            <Text style={styles.buttonText}>Sign In</Text>
+          <TouchableOpacity 
+            style={[styles.button, loading && styles.buttonDisabled]} 
+            onPress={handleVerifyOtp}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? 'Signing In...' : 'Sign In'}
+            </Text>
           </TouchableOpacity>
         )}
       </Animated.View>
 
       <Animated.View style={{ opacity: bottomTextOpacity, marginTop: 30 }}>
-        <TouchableOpacity onPress={() => router.push('/AccountCreation')}>
+        <TouchableOpacity onPress={() => router.push('/CreateAccount')}>
           <Text style={styles.bottomText}>Don't have an account? Create an account</Text>
         </TouchableOpacity>
       </Animated.View>
@@ -168,6 +196,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, marginBottom: 20, color: '#333' },
   input: { fontSize: 17, width: '100%', borderWidth: 1, borderColor: '#ccc', padding: 15, marginBottom: 12, borderRadius: 10 },
   button: { backgroundColor: '#22c55e', padding: 15, borderRadius: 10, alignItems: 'center', marginBottom: 10 },
+  buttonDisabled: { backgroundColor: '#9ca3af', opacity: 0.7 },
   buttonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   error: { color: 'red', marginBottom: 10 },
   bottomText: { color: '#6b48ff', fontWeight: 'bold', textAlign: 'center' },

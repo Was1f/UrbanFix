@@ -18,6 +18,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { apiUrl } from '../constants/api';
 import SessionManager from '../utils/sessionManager';
+import config from '../config';
 import UserProtectedRoute from '../components/UserProtectedRoute';
 
 const { width } = Dimensions.get('window');
@@ -266,9 +267,9 @@ export default function UserHomepage() {
           accessibilityLabel="Go to Profile"
         >
           <View style={styles.avatar}>
-            {user?.profilePicture ? (
+            {user?.profilePic?.uri ? (
               <Image 
-                source={{ uri: user.profilePicture }} 
+                source={{ uri: `${config.API_BASE_URL}${user.profilePic.uri}` }} 
                 style={styles.profileImage}
                 defaultSource={require('../assets/profile.jpg')}
               />

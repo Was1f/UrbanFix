@@ -35,6 +35,7 @@ const announcementRoutes = require('./routes/announcements');
 const accountRoutes = require('./routes/AccountCreate');
 const phoneAuthRoutes = require('./routes/loginAuth');
 const userInfoRoutes = require('./routes/UserInfo');
+const locationRoutes = require('./routes/locations');
 
 
 // ===== Use Routes =====
@@ -50,6 +51,7 @@ app.use('/api/leaderboard', require('./routes/leaderboard'));
 app.use('/api/account', accountRoutes);
 app.use('/api', phoneAuthRoutes);
 app.use('/api/user', userInfoRoutes);
+app.use('/api/locations', locationRoutes);
 
 // ===== Health check endpoint =====
 app.get('/health', (req, res) => {
@@ -120,16 +122,14 @@ mongoose.connect(
 .then(() => {
   console.log('MongoDB Connected');
 
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Server accessible at:`);
-    console.log(`  - Local: http://localhost:${PORT}`);
-    const lanIp = getLocalExternalIPv4();
-    if (lanIp) {
-      console.log(`  - Network: http://${lanIp}:${PORT}`);
-    }
-    console.log(`  - Uploads directory: ${path.join(__dirname, 'uploads')}`);
-  });
+  app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Server accessible at:`);
+  console.log(`  - Local: http://localhost:${PORT}`);
+  console.log(`  - Network: http://192.168.10.115:${PORT} (WiFi)`);
+  console.log(`  - Network: http://192.168.56.1:${PORT} (Virtual)`);
+  console.log(`  - Uploads directory: ${path.join(__dirname, 'uploads')}`);
+});
 })
 .catch(err => console.error('MongoDB connection error:', err));
 

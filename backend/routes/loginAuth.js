@@ -30,6 +30,36 @@ router.post('/login-request', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
+    // Check if user is banned
+    if (user.isBanned) {
+      // Check if ban is expired for temporary bans
+      if (user.banExpiryDate && Date.now() > user.banExpiryDate) {
+        // Ban expired, remove ban status
+        user.isBanned = false;
+        user.banReason = undefined;
+        user.banDate = undefined;
+        user.banExpiryDate = undefined;
+        user.bannedBy = undefined;
+        await user.save();
+      } else {
+        // User is still banned
+        const banMessage = user.banExpiryDate 
+          ? `Your account is temporarily banned until ${new Date(user.banExpiryDate).toLocaleDateString()}. Reason: ${user.banReason}`
+          : `Your account is permanently banned. Reason: ${user.banReason}`;
+        
+        return res.status(403).json({ 
+          success: false, 
+          message: banMessage,
+          error: 'ACCOUNT_BANNED',
+          banDetails: {
+            reason: user.banReason,
+            banDate: user.banDate,
+            expiryDate: user.banExpiryDate
+          }
+        });
+      }
+    }
+
     // Generate OTP
     const otp = generateOTP();
     const key = email || phone;
@@ -92,6 +122,36 @@ router.post('/login-verify', async (req, res) => {
     const user = await User.findOne(email ? { email } : { phone }).select('-__v');
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Double-check ban status (in case user was banned between OTP request and verification)
+    if (user.isBanned) {
+      // Check if ban is expired for temporary bans
+      if (user.banExpiryDate && Date.now() > user.banExpiryDate) {
+        // Ban expired, remove ban status
+        user.isBanned = false;
+        user.banReason = undefined;
+        user.banDate = undefined;
+        user.banExpiryDate = undefined;
+        user.bannedBy = undefined;
+        await user.save();
+      } else {
+        // User is still banned
+        const banMessage = user.banExpiryDate 
+          ? `Your account is temporarily banned until ${new Date(user.banExpiryDate).toLocaleDateString()}. Reason: ${user.banReason}`
+          : `Your account is permanently banned. Reason: ${user.banReason}`;
+        
+        return res.status(403).json({ 
+          success: false, 
+          message: banMessage,
+          error: 'ACCOUNT_BANNED',
+          banDetails: {
+            reason: user.banReason,
+            banDate: user.banDate,
+            expiryDate: user.banExpiryDate
+          }
+        });
+      }
     }
 
     // Delete OTP after success

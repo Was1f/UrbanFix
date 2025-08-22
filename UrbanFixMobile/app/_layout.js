@@ -30,6 +30,18 @@ export default function RootLayout() {
         <Stack.Screen name="EditProfileScreen" />
         <Stack.Screen name="Home" />
         <Stack.Screen name="SplashScreen" />
+        <Stack.Screen name="admin-users" />
+        <Stack.Screen name="admin-user-detail" />
+        <Stack.Screen name="emergency-contacts" />
+        <Stack.Screen name="emergency-report-form" />
+        <Stack.Screen name="discussions" />
+        <Stack.Screen name="discussionspage" />
+        <Stack.Screen name="create-post" />
+        <Stack.Screen name="post-detail" />
+        <Stack.Screen name="CreatePostReport" />
+        <Stack.Screen name="leaderboard" />
+        <Stack.Screen name="moderation-panel" />
+        <Stack.Screen name="nidVerifyScreen" />
       </Stack>
     </AuthProvider>
   );

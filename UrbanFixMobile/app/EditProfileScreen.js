@@ -5,8 +5,9 @@ import {
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import config from '../config'; // updated config with API_BASE_URL
+import config from '../config';
 import UserProtectedRoute from '../components/UserProtectedRoute';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function EditProfileScreen({ navigation, route }) {
   const { updateUser, user: contextUser } = useContext(AuthContext);
@@ -42,6 +43,28 @@ export default function EditProfileScreen({ navigation, route }) {
   const [location, setLocation] = useState('');
   const [verifyProfile, setVerifyProfile] = useState(false);
   const [nid, setNid] = useState('');
+  const [profilePic, setProfilePic] = useState(null);
+  const [uploadingPic, setUploadingPic] = useState(false);
+
+  // Function to convert image to base64
+  const convertImageToBase64 = async (uri) => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result;
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('❌ Error converting image to base64:', error);
+      throw error;
+    }
+  };
 
   // Fetch user data
   useEffect(() => {
@@ -56,6 +79,7 @@ export default function EditProfileScreen({ navigation, route }) {
       try {
         const res = await axios.get(`${config.API_BASE_URL}/api/user/${userId}`);
         const userData = res.data;
+        
         setUser(userData);
 
         // Populate all fields
@@ -69,9 +93,16 @@ export default function EditProfileScreen({ navigation, route }) {
         setLocation(userData.location || '');
         setVerifyProfile(!!userData.verificationBadge);
         setNid(userData.nid || '');
+        
+        // Set profile picture if exists
+        if (userData.profilePic) {
+          setProfilePic(userData.profilePic);
+        }
+        
       } catch (err) {
-        console.error('Error fetching user:', err.message);
-        Alert.alert('Error', 'Failed to load profile.');
+        console.error('❌ Error fetching user:', err.message);
+        console.error('❌ Error details:', err.response?.data);
+        Alert.alert('Error', 'Failed to load profile. Please check your connection.');
       } finally {
         setLoading(false);
       }
@@ -104,7 +135,8 @@ export default function EditProfileScreen({ navigation, route }) {
 
       Alert.alert('Success', 'Profile updated successfully!');
     } catch (err) {
-      console.error('Error saving user data:', err.message);
+      console.error('❌ Error saving user data:', err.message);
+      console.error('❌ Error details:', err.response?.data);
       Alert.alert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
@@ -118,8 +150,105 @@ export default function EditProfileScreen({ navigation, route }) {
       updateUser(res.data.user);
       Alert.alert('Success', 'NID uploaded successfully!');
     } catch (err) {
-      console.error('Error uploading NID:', err.message);
+      console.error('❌ Error uploading NID:', err.message);
       Alert.alert('Error', 'Failed to upload NID. Please try again.');
+    }
+  };
+
+  const handleProfilePictureUpload = async () => {
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant permission to access your photo library.');
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setUploadingPic(true);
+        const asset = result.assets[0];
+
+        // Convert image to base64
+        console.log('🔄 Converting image to base64...');
+        const base64Image = await convertImageToBase64(asset.uri);
+        
+        console.log('📤 Uploading profile picture as base64:', {
+          uri: asset.uri,
+          type: asset.type,
+          fileName: asset.fileName,
+          base64Length: base64Image.length
+        });
+
+        console.log('🚀 Starting base64 upload to:', `${config.API_BASE_URL}/api/upload/base64`);
+        
+        // Upload base64 image
+        const uploadRes = await axios.post(`${config.API_BASE_URL}/api/upload/base64`, {
+          imageBase64: base64Image,
+          imageFileName: asset.fileName || 'profile.jpg',
+          type: 'profile'
+        }, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000, // 30 second timeout
+        });
+
+        if (uploadRes.data.success) {
+          const newProfilePic = {
+            uri: uploadRes.data.filePath,
+            type: 'image/jpeg',
+            size: 0
+          };
+          
+          // Update user profile with new picture
+          const updateRes = await axios.patch(`${config.API_BASE_URL}/api/user/${userId}/profile-pic`, {
+            profilePic: newProfilePic
+          });
+
+          if (updateRes.data.success) {
+            setProfilePic(newProfilePic);
+            setUser(prev => ({ ...prev, profilePic: newProfilePic }));
+            updateUser({ ...user, profilePic: newProfilePic });
+            Alert.alert('Success', 'Profile picture updated successfully!');
+          } else {
+            Alert.alert('Error', 'Failed to update profile picture.');
+          }
+        } else {
+          Alert.alert('Error', 'Failed to upload image.');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Profile picture upload error:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        status: error.response?.status,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers
+        }
+      });
+      
+      let errorMessage = 'Failed to upload profile picture. Please try again.';
+      if (error.response?.status === 413) {
+        errorMessage = 'Image file is too large. Please select a smaller image.';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Upload timed out. Please check your connection and try again.';
+      }
+      
+      Alert.alert('Upload Error', errorMessage);
+    } finally {
+      setUploadingPic(false);
     }
   };
 
@@ -137,13 +266,18 @@ export default function EditProfileScreen({ navigation, route }) {
 
   if (loading) return (
     <UserProtectedRoute>
-      <ActivityIndicator size="large" color="#6b48ff" style={{ marginTop: 20 }} />
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#6b48ff" style={{ marginTop: 20 }} />
+        <Text style={{ textAlign: 'center', marginTop: 10 }}>Loading profile...</Text>
+      </View>
     </UserProtectedRoute>
   );
 
   if (!user) return (
     <UserProtectedRoute>
-      <Text style={{ textAlign: 'center', marginTop: 20 }}>User not found</Text>
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center', marginTop: 20 }}>User not found</Text>
+      </View>
     </UserProtectedRoute>
   );
 
@@ -163,9 +297,25 @@ export default function EditProfileScreen({ navigation, route }) {
 
         <ScrollView contentContainerStyle={{ padding: 20 }}>
           {/* Profile Photo */}
-          <TouchableOpacity style={styles.profilePhotoBtn} onPress={() => console.log('Change photo')}>
-            <Image source={require('../assets/profile.jpg')} style={styles.profileImage} />
-            <Text style={styles.photoText}>Change Photo</Text>
+          <TouchableOpacity 
+            style={styles.profilePhotoBtn} 
+            onPress={handleProfilePictureUpload}
+            disabled={uploadingPic}
+          >
+            <Image 
+              source={
+                profilePic?.uri 
+                  ? { uri: `${config.API_BASE_URL}${profilePic.uri}` }
+                  : user?.profilePic?.uri 
+                    ? { uri: `${config.API_BASE_URL}${user.profilePic.uri}` }
+                    : require('../assets/profile.jpg')
+              } 
+              style={styles.profileImage} 
+            />
+            <Text style={styles.photoText}>
+              {uploadingPic ? 'Uploading...' : 'Change Photo'}
+            </Text>
+            {uploadingPic && <ActivityIndicator size="small" color="#6b48ff" style={{ marginTop: 8 }} />}
           </TouchableOpacity>
 
           {/* Personal Info */}

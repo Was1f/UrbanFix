@@ -30,7 +30,6 @@ class SessionManager {
         [SESSION_KEYS.SESSION_TIMESTAMP, Date.now().toString()],
       ]);
       
-      console.log('✅ Admin session stored successfully (AsyncStorage)');
       return true;
     } catch (error) {
       console.error('❌ Error storing admin session:', error);
@@ -51,7 +50,6 @@ class SessionManager {
       // Check if session has expired
       const sessionAge = Date.now() - parseInt(timestamp);
       if (sessionAge > SESSION_TIMEOUT) {
-        console.log('⚠️ Session expired, clearing...');
         await this.clearAdminSession();
         return null;
       }
@@ -80,7 +78,6 @@ class SessionManager {
       // Check if session has expired
       const sessionAge = Date.now() - parseInt(timestamp[1]);
       if (sessionAge > SESSION_TIMEOUT) {
-        console.log('⚠️ Session expired, clearing...');
         await this.clearAdminSession();
         return null;
       }
@@ -114,7 +111,6 @@ class SessionManager {
         SESSION_KEYS.SESSION_TIMESTAMP,
       ]);
       
-      console.log('✅ Admin session cleared successfully (AsyncStorage)');
       return true;
     } catch (error) {
       console.error('❌ Error clearing admin session:', error);
@@ -128,7 +124,6 @@ class SessionManager {
       const session = await this.getAdminSession();
       if (session) {
         await AsyncStorage.setItem(SESSION_KEYS.SESSION_TIMESTAMP, Date.now().toString());
-        console.log('✅ Session refreshed (AsyncStorage)');
         return true;
       }
       return false;
@@ -154,7 +149,6 @@ class SessionManager {
         [SESSION_KEYS.USER_SESSION_TIMESTAMP, Date.now().toString()],
       ]);
       
-      console.log('✅ User session stored successfully (AsyncStorage)');
       return true;
     } catch (error) {
       console.error('❌ Error storing user session:', error);
@@ -177,7 +171,6 @@ class SessionManager {
       // Check if session has expired
       const sessionAge = Date.now() - parseInt(timestamp[1]);
       if (sessionAge > SESSION_TIMEOUT) {
-        console.log('⚠️ User session expired, clearing...');
         await this.clearUserSession();
         return null;
       }
@@ -213,7 +206,6 @@ class SessionManager {
         SESSION_KEYS.USER_SESSION_TIMESTAMP,
       ]);
       
-      console.log('✅ User session cleared successfully (AsyncStorage)');
       return true;
     } catch (error) {
       console.error('❌ Error clearing user session:', error);
@@ -228,7 +220,6 @@ class SessionManager {
       if (session) {
         // Update user data while keeping the same timestamp
         await AsyncStorage.setItem(SESSION_KEYS.USER_DATA, JSON.stringify(updatedUserData));
-        console.log('✅ User session updated (AsyncStorage)');
         return true;
       }
       return false;
@@ -244,7 +235,6 @@ class SessionManager {
       const session = await this.getUserSession();
       if (session) {
         await AsyncStorage.setItem(SESSION_KEYS.USER_SESSION_TIMESTAMP, Date.now().toString());
-        console.log('✅ User session refreshed (AsyncStorage)');
         return true;
       }
       return false;

@@ -265,6 +265,20 @@ export default function AdminDashboard() {
             >
               <Text style={styles.actionButtonText}>Manage Announcements</Text>
             </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => {
+                if (session?.token) {
+                  router.push('/admin-users');
+                } else {
+                  Alert.alert('Authentication Required', 'Please login again to access this feature.', [
+                    { text: 'OK', onPress: () => router.replace('/admin-login') }
+                  ]);
+                }
+              }}
+            >
+              <Text style={styles.actionButtonText}>Manage Users</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>

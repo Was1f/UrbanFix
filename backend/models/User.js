@@ -44,9 +44,9 @@ const userSchema = new mongoose.Schema({
   // Profile & Engagement
   // ----------------------------
   profilePic: {
-    uri: String,
-    type: String,
-    size: Number
+    uri: { type: String }, // This will store the file path like "/uploads/profile/uuid-timestamp.jpg"
+    type: { type: String, default: 'image/jpeg' },
+    size: { type: Number, default: 0 }
   },
   bio: { type: String },
   helpType: { type: String },
@@ -59,6 +59,15 @@ const userSchema = new mongoose.Schema({
     code: String,
     expiresAt: Date
   },
+
+  // ----------------------------
+  // Ban Management
+  // ----------------------------
+  isBanned: { type: Boolean, default: false },
+  banReason: { type: String, trim: true },
+  banDate: { type: Date },
+  banExpiryDate: { type: Date }, // null for permanent bans
+  bannedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 
   // ----------------------------
   // Additional Fields
@@ -86,6 +95,20 @@ const userSchema = new mongoose.Schema({
 
 // Indexes for efficient lookups
 userSchema.index({ phone: 1 });
-userSchema.index({ location: 1 });
+userSchema.index({ isBanned: 1 });
+// Note: location is just a string (city name), not coordinates, so no geospatial index needed
+
+// Virtual for checking if ban is expired
+userSchema.virtual('isBanExpired').get(function() {
+  if (!this.isBanned || !this.banExpiryDate) return false;
+  return Date.now() > this.banExpiryDate;
+});
+
+// Method to check if user is currently banned
+userSchema.methods.isCurrentlyBanned = function() {
+  if (!this.isBanned) return false;
+  if (!this.banExpiryDate) return true; // permanent ban
+  return Date.now() <= this.banExpiryDate; // temporary ban not expired
+};
 
 module.exports = mongoose.model('User', userSchema);

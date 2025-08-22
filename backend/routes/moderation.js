@@ -43,6 +43,7 @@ router.get('/admin/reports', authenticateToken, async (req, res) => {
     const reports = await Report.find(query)
       .populate('discussionId', 'title description type author time image status')
       .populate('reviewedBy', 'username')
+      .populate('reportedUserId', 'fname lname username phone') // Populate user info
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
@@ -68,7 +69,8 @@ router.get('/admin/reports/:id', authenticateToken, async (req, res) => {
   try {
     const report = await Report.findById(req.params.id)
       .populate('discussionId', 'title description type author time image status')
-      .populate('reviewedBy', 'username');
+      .populate('reviewedBy', 'username')
+      .populate('reportedUserId', 'fname lname username phone'); // Populate user info
 
     if (!report) {
       return res.status(404).json({ message: 'Report not found' });
@@ -138,6 +140,71 @@ router.post('/admin/reports/:id/action', authenticateToken, async (req, res) => 
   }
 });
 
+// Ban user from reported content (ADMIN ONLY)
+router.post('/admin/reports/:id/ban-user', authenticateToken, async (req, res) => {
+  try {
+    const { banReason, banDuration } = req.body; // banDuration: 'temporary' or 'permanent'
+    const { id } = req.params;
+
+    const report = await Report.findById(id);
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    if (!report.reportedUserId) {
+      return res.status(400).json({ message: 'No user ID found in this report' });
+    }
+
+    // Import User model
+    const User = require('../models/User');
+
+    // Find and ban the user
+    const user = await User.findById(report.reportedUserId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Set ban details
+    user.isBanned = true;
+    user.banReason = banReason || 'Violation of community guidelines';
+    user.banDate = new Date();
+    user.bannedBy = req.admin._id;
+
+    if (banDuration === 'temporary') {
+      // Ban for 7 days by default
+      user.banExpiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    } else {
+      // Permanent ban
+      user.banExpiryDate = null;
+    }
+
+    await user.save();
+
+    // Update report status to resolved
+    report.status = 'resolved';
+    report.adminNotes = `User banned: ${banReason}`;
+    report.reviewedBy = req.admin._id;
+    report.reviewedAt = new Date();
+    await report.save();
+
+    res.json({
+      message: 'User banned successfully',
+      user: {
+        _id: user._id,
+        username: user.username || user.fname,
+        isBanned: user.isBanned,
+        banReason: user.banReason,
+        banExpiryDate: user.banExpiryDate
+      },
+      report
+    });
+
+  } catch (error) {
+    console.error('Error banning user:', error);
+    res.status(500).json({ message: 'Error banning user' });
+  }
+});
+
 // Get moderation statistics (ADMIN ONLY)
 router.get('/admin/stats', authenticateToken, async (req, res) => {
   try {
@@ -169,7 +236,7 @@ router.get('/admin/stats', authenticateToken, async (req, res) => {
 // Report a discussion (for users - PUBLIC ROUTE)
 router.post('/user/report', async (req, res) => {
   try {
-    const { discussionId, reason, reporterUsername = 'Anonymous' } = req.body;
+    const { discussionId, reason, reporterUsername = 'Anonymous', reportedUserId } = req.body;
 
     if (!discussionId || !reason) {
       return res.status(400).json({ message: 'Discussion ID and reason are required' });
@@ -192,11 +259,13 @@ router.post('/user/report', async (req, res) => {
       return res.status(200).json({ message: 'Report already pending review', report: existingReport });
     }
 
-    // Create new report
+    // Create new report with user information
     const report = new Report({
       discussionId,
       reason,
-      reporterUsername
+      reporterUsername,
+      reportedUserId: reportedUserId || null, // Add user ID if provided
+      reportedUsername: discussion.author || 'Anonymous' // Use discussion author as reported username
     });
 
     await report.save();

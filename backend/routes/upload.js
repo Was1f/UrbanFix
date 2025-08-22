@@ -9,10 +9,11 @@ const { v4: uuidv4 } = require('uuid');
 const uploadDir = path.join(__dirname, '../uploads');
 const communityDir = path.join(uploadDir, 'community');
 const appointmentDir = path.join(uploadDir, 'appointment');
+const profileDir = path.join(uploadDir, 'profile'); // New profile pictures directory
 const audioDir = path.join(communityDir, 'audio');
 const videoDir = path.join(communityDir, 'video');
 
-[uploadDir, communityDir, appointmentDir, audioDir, videoDir].forEach(dir => {
+[uploadDir, communityDir, appointmentDir, profileDir, audioDir, videoDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -26,8 +27,21 @@ const storage = multer.diskStorage({
     } else if (file.fieldname === 'video') {
       cb(null, videoDir);
     } else {
-      const uploadType = req.body.uploadType || 'community';
-      const destDir = uploadType === 'appointment' ? appointmentDir : communityDir;
+      // For general uploads, use the type from body
+      const uploadType = req.body.type || 'community';
+      let destDir;
+      
+      switch (uploadType) {
+        case 'profile':
+          destDir = profileDir;
+          break;
+        case 'appointment':
+          destDir = appointmentDir;
+          break;
+        default:
+          destDir = communityDir;
+      }
+      
       cb(null, destDir);
     }
   },
@@ -88,6 +102,190 @@ router.use((req, res, next) => {
 router.get('/test', (req, res) => {
   console.log('Test route hit');
   res.json({ message: 'Upload routes working' });
+});
+
+// Simple test endpoint without multer to check if the issue is with file handling
+router.post('/test-upload', (req, res) => {
+  console.log('=== TEST UPLOAD REQUEST ===');
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body);
+  console.log('Files:', req.files);
+  res.json({ 
+    success: true, 
+    message: 'Test endpoint reached',
+    headers: req.headers,
+    body: req.body
+  });
+});
+
+// Base64 image upload endpoint for profile pictures
+router.post('/base64', async (req, res) => {
+  try {
+    console.log('=== BASE64 UPLOAD REQUEST ===');
+    console.log('Body keys:', Object.keys(req.body));
+    
+    const { imageBase64, imageFileName, type } = req.body;
+    
+    if (!imageBase64 || !imageFileName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image data and filename are required'
+      });
+    }
+
+    // Extract base64 data (remove data:type/subtype;base64, prefix)
+    const matches = imageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid base64 image data format' 
+      });
+    }
+    
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    
+    // Validate MIME type
+    if (!mimeType.startsWith('image/')) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid image type' 
+      });
+    }
+    
+    // Check file size (approximate: base64Length * 0.75)
+    const approximateFileSize = base64Data.length * 0.75;
+    const maxFileSize = 10 * 1024 * 1024; // 10MB
+    
+    if (approximateFileSize > maxFileSize) {
+      return res.status(400).json({ 
+        success: false,
+        message: `Image too large. Maximum size is ${Math.round(maxFileSize / 1024 / 1024)}MB.`,
+        approximateSize: Math.round(approximateFileSize / 1024 / 1024) + 'MB'
+      });
+    }
+    
+    // Determine destination directory
+    let destDir;
+    let urlPrefix;
+    
+    switch (type) {
+      case 'profile':
+        destDir = profileDir;
+        urlPrefix = '/uploads/profile';
+        break;
+      case 'community':
+        destDir = communityDir;
+        urlPrefix = '/uploads/community';
+        break;
+      case 'appointment':
+        destDir = appointmentDir;
+        urlPrefix = '/uploads/appointment';
+        break;
+      default:
+        destDir = uploadDir;
+        urlPrefix = '/uploads';
+    }
+    
+    // Convert base64 to buffer and save file
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    const uniqueFileName = `${type}-${uuidv4()}-${Date.now()}-${imageFileName}`;
+    const filePath = path.join(destDir, uniqueFileName);
+    
+    // Ensure directory exists
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    
+    // Write file to disk
+    fs.writeFileSync(filePath, imageBuffer);
+    
+    const imageUrl = `${urlPrefix}/${uniqueFileName}`;
+    
+    console.log('✅ Base64 image uploaded successfully:', imageUrl);
+    
+    res.json({
+      success: true,
+      message: 'Image uploaded successfully',
+      filePath: imageUrl,
+      fileName: uniqueFileName,
+      originalName: imageFileName,
+      size: imageBuffer.length,
+      mimetype: mimeType
+    });
+
+  } catch (error) {
+    console.error('❌ Base64 upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Upload failed',
+      error: error.message
+    });
+  }
+});
+
+// General file upload endpoint for profile pictures and other files
+router.post('/', upload.single('file'), async (req, res) => {
+  try {
+    console.log('=== GENERAL UPLOAD REQUEST ===');
+    console.log('Body:', req.body);
+    console.log('File:', req.file);
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const uploadType = req.body.type || 'general';
+    let filePath;
+    let destDir;
+
+    // Determine destination directory based on type
+    switch (uploadType) {
+      case 'profile':
+        destDir = profileDir;
+        break;
+      case 'community':
+        destDir = communityDir;
+        break;
+      case 'appointment':
+        destDir = appointmentDir;
+        break;
+      default:
+        destDir = uploadDir;
+    }
+
+    // Move file to appropriate directory if it's not already there
+    if (req.file.destination !== destDir) {
+      const newFilePath = path.join(destDir, req.file.filename);
+      fs.renameSync(req.file.path, newFilePath);
+      filePath = `/uploads/${uploadType}/${req.file.filename}`;
+    } else {
+      filePath = `/uploads/${uploadType}/${req.file.filename}`;
+    }
+
+    console.log('✅ File uploaded successfully:', filePath);
+    
+    res.json({
+      success: true,
+      message: 'File uploaded successfully',
+      filePath: filePath,
+      fileName: req.file.filename,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Upload failed',
+      error: error.message
+    });
+  }
 });
 // Unified community media upload endpoint
 router.post('/community', async (req, res) => {

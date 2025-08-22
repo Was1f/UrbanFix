@@ -96,6 +96,46 @@ router.patch('/:id/nid', async (req, res) => {
   }
 });
 
+// Update profile picture
+router.patch('/:id/profile-pic', async (req, res) => {
+  const userId = req.params.id;
+  const { profilePic } = req.body;
+  
+  if (!profilePic || !profilePic.uri) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Profile picture data is required' 
+    });
+  }
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { profilePic },
+      { new: true }
+    );
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Profile picture updated successfully', 
+      user 
+    });
+  } catch (err) {
+    console.error('Profile picture update error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error during profile picture update' 
+    });
+  }
+});
+
 // Update user info
 router.put('/:id', async (req, res) => {
   const userId = req.params.id;
