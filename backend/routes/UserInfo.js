@@ -2,10 +2,24 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 
+const Board = require('../models/Board');
+
+// Get available locations (boards + "Others" option)
+router.get('/locations', async (req, res) => {
+  try {
+    const boards = await Board.find({}).select('title');
+    const locations = boards.map(board => board.title);
+    locations.push('Others'); // Add "Others" as an option
+    res.json(locations);
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching locations' });
+  }
+});
+
 // Create new user
 router.post('/', async (req, res) => {
-  const { fname, lname, phone, email, address, profession, gender } = req.body;
-  
+  const { fname, lname, phone, email, address, profession, gender, location } = req.body;
+
   if (!fname || !lname || !phone) {
     return res.status(400).json({ 
       success: false, 
@@ -31,7 +45,8 @@ router.post('/', async (req, res) => {
       email,
       address,
       profession,
-      gender
+      gender,
+      location: location || 'Dhanmondi' // Default to Dhanmondi if not provided
     });
 
     const savedUser = await newUser.save();

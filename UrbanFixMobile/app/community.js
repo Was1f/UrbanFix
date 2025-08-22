@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useContext } from 'react';
 import {
   View,
   Text,
@@ -11,28 +11,190 @@ import {
   Pressable,
   Dimensions,
   SafeAreaView,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { apiUrl } from '../constants/api';
 import UserProtectedRoute from '../components/UserProtectedRoute';
+import { AuthContext } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
 const CommunityHome = () => {
   const router = useRouter();
+  const { user } = useContext(AuthContext);
 
   const [boards, setBoards] = useState([]);
   const [discussions, setDiscussions] = useState([]);
+  const [filteredDiscussions, setFilteredDiscussions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reportedMap, setReportedMap] = useState({});
+
+  // Enhanced filtering and sorting states
+  const [sortBy, setSortBy] = useState('popular'); // Start with popular as default
+  const [filterArea, setFilterArea] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterUrgency, setFilterUrgency] = useState('');
+  
+  // Modal states for dropdowns
+  const [showSortModal, setShowSortModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showUrgencyModal, setShowUrgencyModal] = useState(false);
+
+  // Filter and sort options
+  const sortOptions = [
+    { value: 'popular', label: 'Most Popular', icon: '🔥' },
+    { value: 'recent', label: 'Most Recent', icon: '🕒' },
+    { value: 'oldest', label: 'Oldest First', icon: '📅' },
+    { value: 'most_comments', label: 'Most Discussed', icon: '💬' },
+    { value: 'most_likes', label: 'Most Liked', icon: '❤️' },
+  ];
+
+  const categoryOptions = [
+    { value: '', label: 'All Categories', icon: '📋' },
+    { value: 'Report', label: 'Reports', icon: '🚨' },
+    { value: 'Poll', label: 'Polls', icon: '📊' },
+    { value: 'Event', label: 'Events', icon: '📅' },
+    { value: 'Donation', label: 'Donations', icon: '💝' },
+    { value: 'Volunteer', label: 'Volunteer', icon: '🤝' },
+  ];
+
+  const urgencyOptions = [
+    { value: '', label: 'All Priorities', icon: '⚡' },
+    { value: 'urgent', label: 'Urgent', icon: '🔴', color: '#ef4444' },
+    { value: 'high', label: 'High Priority', icon: '🟠', color: '#f97316' },
+    { value: 'medium', label: 'Medium Priority', icon: '🟡', color: '#eab308' },
+    { value: 'normal', label: 'Normal', icon: '🟢', color: '#22c55e' },
+    { value: 'low', label: 'Low Priority', icon: '🔵', color: '#3b82f6' },
+  ];
+
+  // Get current user info
+  const getCurrentUser = () => {
+    if (!user) return 'Anonymous';
+    return user.phone;
+  };
+
+  // Helper function to construct proper image URLs
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    
+    if (imagePath.startsWith('/uploads/')) {
+      return apiUrl(imagePath);
+    }
+    
+    if (!imagePath.startsWith('/')) {
+      return apiUrl(`/uploads/community/${imagePath}`);
+    }
+    
+    return apiUrl(imagePath);
+  };
+
+  // Calculate popularity score for sorting (enhanced algorithm)
+  const calculatePopularityScore = (discussion) => {
+    const now = new Date();
+    const postDate = new Date(discussion.createdAt);
+    const hoursAge = Math.max(1, (now - postDate) / (1000 * 60 * 60)); // Minimum 1 hour
+    
+    // Base engagement metrics
+    const likes = discussion.likes?.length || 0;
+    const comments = discussion.comments?.length || 0;
+    
+    // Weight different types of engagement
+    const likeWeight = 1;
+    const commentWeight = 3; // Comments are more valuable than likes
+    
+    // Priority/urgency multiplier
+    const urgencyMultipliers = {
+      'urgent': 4,
+      'high': 2.5,
+      'medium': 1.5,
+      'normal': 1,
+      'low': 0.8
+    };
+    const urgencyMultiplier = urgencyMultipliers[discussion.priority] || 1;
+    
+    // Post type multiplier (reports and events might need more visibility)
+    const typeMultipliers = {
+      'Report': 1.3,
+      'Event': 1.2,
+      'Donation': 1.1,
+      'Poll': 1,
+      'Volunteer': 1
+    };
+    const typeMultiplier = typeMultipliers[discussion.type] || 1;
+    
+    // Raw engagement score
+    const engagementScore = (likes * likeWeight) + (comments * commentWeight);
+    
+    // Time decay factor - newer posts get boost, but not too aggressive
+    const timeDecayFactor = Math.pow(hoursAge, -0.3); // Gentle decay
+    
+    // Velocity bonus for posts getting engagement quickly
+    const velocityBonus = hoursAge < 24 ? (engagementScore / Math.max(1, hoursAge)) * 0.1 : 0;
+    
+    // Final popularity score
+    const popularityScore = (
+      engagementScore * 
+      timeDecayFactor * 
+      urgencyMultiplier * 
+      typeMultiplier
+    ) + velocityBonus;
+    
+    return Math.max(0, popularityScore);
+  };
+
+  // Enhanced sorting and filtering function
+  const applySortingAndFiltering = useCallback(() => {
+    let filtered = [...discussions];
+
+    // Apply area filter
+    if (filterArea) {
+      filtered = filtered.filter(d => d.location === filterArea);
+    }
+
+    // Apply category filter
+    if (filterCategory) {
+      filtered = filtered.filter(d => d.type === filterCategory);
+    }
+
+    // Apply urgency filter
+    if (filterUrgency) {
+      filtered = filtered.filter(d => d.priority === filterUrgency);
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case 'popular':
+        filtered.sort((a, b) => calculatePopularityScore(b) - calculatePopularityScore(a));
+        break;
+      case 'oldest':
+        filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        break;
+      case 'most_comments':
+        filtered.sort((a, b) => (b.comments?.length || 0) - (a.comments?.length || 0));
+        break;
+      case 'most_likes':
+        filtered.sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0));
+        break;
+      case 'recent':
+      default:
+        filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        break;
+    }
+
+    setFilteredDiscussions(filtered);
+  }, [discussions, sortBy, filterArea, filterCategory, filterUrgency]);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       
-      // Fetch boards and discussions concurrently
       const [boardsRes, discussionsRes] = await Promise.all([
         fetch(apiUrl('/api/boards')),
         fetch(apiUrl('/api/discussions'))
@@ -50,7 +212,6 @@ const CommunityHome = () => {
       setBoards(boardsData);
       setDiscussions(discussionsData);
 
-      // Map reported discussions
       const nextReported = {};
       discussionsData.forEach((disc) => {
         if (disc?.status === 'flagged') {
@@ -71,6 +232,10 @@ const CommunityHome = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    applySortingAndFiltering();
+  }, [applySortingAndFiltering]);
 
   useFocusEffect(
     useCallback(() => {
@@ -94,7 +259,20 @@ const CommunityHome = () => {
   };
 
   const handlePostPress = (post) => {
-    router.push(`/post-detail?postId=${post._id}`);
+    if (!post._id) {
+      Alert.alert('Error', 'Invalid post data');
+      return;
+    }
+    
+    try {
+      router.push(`/post-detail?postId=${post._id}`);
+    } catch (error) {
+      console.error('Navigation error:', error);
+      router.push({
+        pathname: '/post-detail',
+        params: { postId: post._id }
+      });
+    }
   };
 
   const formatTimeAgo = (dateString) => {
@@ -103,9 +281,9 @@ const CommunityHome = () => {
     const now = new Date();
     const diffInMinutes = Math.floor((now - date) / (1000 * 60));
     if (diffInMinutes < 1) return 'Just now';
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+    if (diffInMinutes < 60) return `${diffInMinutes}m`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`;
+    return `${Math.floor(diffInMinutes / 1440)}d`;
   };
 
   const retryFetch = () => {
@@ -167,38 +345,145 @@ const CommunityHome = () => {
     }
   };
 
-  const renderPostTypeIndicator = (post) => {
-    let icon = '';
-    let color = '#666';
-    
-    switch (post.type) {
-      case 'Poll':
-        icon = '📊';
-        color = '#1e90ff';
-        break;
-      case 'Event':
-        icon = '📅';
-        color = '#4caf50';
-        break;
-      case 'Donation':
-        icon = '💰';
-        color = '#ff9800';
-        break;
-      case 'Volunteer':
-        icon = '🤝';
-        color = '#9c27b0';
-        break;
-      case 'Report':
-        icon = '⚠️';
-        color = '#f44336';
-        break;
-      default:
-        icon = '📝';
+  const handleOfferHelp = async (discussionId) => {
+    try {
+      const currentUserName = getCurrentUser();
+      
+      const currentDiscussion = discussions.find(d => d._id === discussionId);
+      const userAlreadyOfferedHelp = currentDiscussion?.helpers?.some(h => h.username === currentUserName);
+      
+      const endpoint = userAlreadyOfferedHelp ? 'withdraw-help' : 'offer-help';
+      
+      const response = await fetch(apiUrl(`/api/discussions/${discussionId}/${endpoint}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUserName }),
+      });
+
+      if (response.ok) {
+        const updatedPost = await response.json();
+        setDiscussions(prev => prev.map(d => 
+          d._id === discussionId ? updatedPost : d
+        ));
+        
+        const message = userAlreadyOfferedHelp 
+          ? 'You are no longer helping with this report.' 
+          : 'Thank you! The poster will be notified that you want to help.';
+        
+        Alert.alert(userAlreadyOfferedHelp ? 'Help Withdrawn' : 'Help Offered', message);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        Alert.alert('Error', errorData.message || 'Failed to update help status');
+      }
+    } catch (error) {
+      console.error('Error with help action:', error);
+      Alert.alert('Error', 'Failed to update help status');
     }
+  };
+
+  const getPostTypeConfig = (type) => {
+    const configs = {
+      Poll: { emoji: '📊', color: '#6366f1', bg: '#eef2ff' },
+      Event: { emoji: '📅', color: '#059669', bg: '#ecfdf5' },
+      Donation: { emoji: '💝', color: '#dc2626', bg: '#fef2f2' },
+      Volunteer: { emoji: '🤝', color: '#7c3aed', bg: '#f3e8ff' },
+      Report: { emoji: '🚨', color: '#ea580c', bg: '#fff7ed' },
+    };
+    return configs[type] || { emoji: '📄', color: '#6b7280', bg: '#f9fafb' };
+  };
+
+  const renderPostTypeIndicator = (post) => {
+    const config = getPostTypeConfig(post.type);
+    return (
+      <View style={[styles.typeBadge, { backgroundColor: config.bg }]}>
+        <Text style={[styles.typeEmoji]}>{config.emoji}</Text>
+        <Text style={[styles.typeText, { color: config.color }]}>{post.type}</Text>
+      </View>
+    );
+  };
+
+  const renderDropdownModal = (visible, onClose, options, selectedValue, onSelect, title) => (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <ScrollView style={styles.modalOptions}>
+            {options.map((option) => (
+              <Pressable
+                key={option.value}
+                style={[
+                  styles.modalOption,
+                  selectedValue === option.value && styles.modalOptionSelected
+                ]}
+                onPress={() => {
+                  onSelect(option.value);
+                  onClose();
+                }}
+              >
+                <Text style={styles.modalOptionEmoji}>{option.icon}</Text>
+                <Text style={[
+                  styles.modalOptionText,
+                  selectedValue === option.value && styles.modalOptionTextSelected
+                ]}>
+                  {option.label}
+                </Text>
+                {selectedValue === option.value && (
+                  <Text style={styles.modalOptionCheck}>✓</Text>
+                )}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+
+  const renderFilterChips = () => {
+    const activeFilters = [];
+    
+    if (filterArea) activeFilters.push({ label: filterArea === 'Dhanmondi' ? 'My Area (Dhanmondi)' : filterArea, type: 'area' });
+    if (filterCategory) activeFilters.push({ label: filterCategory, type: 'category' });
+    if (filterUrgency) activeFilters.push({ label: urgencyOptions.find(u => u.value === filterUrgency)?.label, type: 'urgency' });
+    
+    if (activeFilters.length === 0) return null;
 
     return (
-      <View style={[styles.typePill, { backgroundColor: color + '20' }]}>
-        <Text style={[styles.typeText, { color }]}>{icon} {post.type}</Text>
+      <View style={styles.activeFiltersSection}>
+        <Text style={styles.activeFiltersLabel}>Active filters:</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.activeFiltersContainer}>
+            {activeFilters.map((filter, index) => (
+              <View key={index} style={styles.activeFilterChip}>
+                <Text style={styles.activeFilterText}>{filter.label}</Text>
+                <Pressable
+                  onPress={() => {
+                    if (filter.type === 'area') setFilterArea('');
+                    if (filter.type === 'category') setFilterCategory('');
+                    if (filter.type === 'urgency') setFilterUrgency('');
+                  }}
+                  style={styles.removeFilterButton}
+                >
+                  <Text style={styles.removeFilterText}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Pressable
+              style={styles.clearAllFiltersButton}
+              onPress={() => {
+                setFilterArea('');
+                setFilterCategory('');
+                setFilterUrgency('');
+              }}
+            >
+              <Text style={styles.clearAllFiltersText}>Clear All</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </View>
     );
   };
@@ -206,7 +491,6 @@ const CommunityHome = () => {
   const renderPostPreview = (post) => {
     switch (post.type) {
       case 'Poll':
-        // Handle Map object from MongoDB
         let totalVotes = 0;
         if (post.pollVotes) {
           if (post.pollVotes instanceof Map) {
@@ -216,17 +500,17 @@ const CommunityHome = () => {
           }
         }
         return (
-          <Text style={styles.postPreview}>
-            Poll • {totalVotes} votes • {post.pollOptions?.length || 0} options
-          </Text>
+          <View style={styles.previewContainer}>
+            <Text style={styles.previewText}>{totalVotes} votes • {post.pollOptions?.length || 0} options</Text>
+          </View>
         );
       
       case 'Event':
         const eventDate = post.eventDate ? new Date(post.eventDate).toLocaleDateString() : 'Date TBD';
         return (
-          <Text style={styles.postPreview}>
-            Event • {eventDate} • {post.attendeeCount || 0} attending
-          </Text>
+          <View style={styles.previewContainer}>
+            <Text style={styles.previewText}>{eventDate} • {post.attendeeCount || 0} attending</Text>
+          </View>
         );
       
       case 'Donation':
@@ -234,25 +518,34 @@ const CommunityHome = () => {
         const goal = post.goalAmount;
         const progress = goal ? Math.round((raised / goal) * 100) : 0;
         return (
-          <Text style={styles.postPreview}>
-            Donation • ৳{raised.toLocaleString()} raised{goal ? ` (${progress}% of ৳${goal.toLocaleString()})` : ''}
-          </Text>
+          <View style={styles.previewContainer}>
+            <Text style={styles.previewText}>
+              ৳{raised.toLocaleString()} raised{goal ? ` (${progress}%)` : ''}
+            </Text>
+          </View>
         );
       
       case 'Volunteer':
         const volunteersText = post.volunteersNeeded ? 
           ` of ${post.volunteersNeeded} needed` : '';
         return (
-          <Text style={styles.postPreview}>
-            Volunteer • {post.volunteerCount || 0} signed up{volunteersText}
-          </Text>
+          <View style={styles.previewContainer}>
+            <Text style={styles.previewText}>
+              {post.volunteerCount || 0} volunteers{volunteersText}
+            </Text>
+          </View>
         );
       
       case 'Report':
+        const priorityLabel = post.priority && post.priority !== 'normal' ? 
+          ` • ${post.priority.charAt(0).toUpperCase() + post.priority.slice(1)} Priority` : '';
+        
         return (
-          <Text style={styles.postPreview}>
-            Community Report • Help resolve this issue
-          </Text>
+          <View style={styles.previewContainer}>
+            <Text style={styles.previewText}>
+              🚨 Community issue{priorityLabel} • {post.helperCount || 0} people helping
+            </Text>
+          </View>
         );
       
       default:
@@ -260,563 +553,890 @@ const CommunityHome = () => {
     }
   };
 
-  const renderInteractionButtons = (post) => {
-    const buttons = [];
-
-    switch (post.type) {
-      case 'Poll':
-        buttons.push(
-          <Pressable
-            key="vote"
-            style={styles.interactionButton}
-            onPress={() => handlePostPress(post)}
-          >
-            <Text style={styles.interactionButtonText}>📊 Vote</Text>
-          </Pressable>
-        );
-        break;
-
-      case 'Event':
-        buttons.push(
-          <Pressable
-            key="rsvp"
-            style={styles.interactionButton}
-            onPress={() => handlePostPress(post)}
-          >
-            <Text style={styles.interactionButtonText}>📅 RSVP</Text>
-          </Pressable>
-        );
-        break;
-
-      case 'Donation':
-        buttons.push(
-          <Pressable
-            key="donate"
-            style={styles.interactionButton}
-            onPress={() => handlePostPress(post)}
-          >
-            <Text style={styles.interactionButtonText}>💰 Donate</Text>
-          </Pressable>
-        );
-        break;
-
-      case 'Volunteer':
-        buttons.push(
-          <Pressable
-            key="volunteer"
-            style={styles.interactionButton}
-            onPress={() => handlePostPress(post)}
-          >
-            <Text style={styles.interactionButtonText}>🤝 Volunteer</Text>
-          </Pressable>
-        );
-        break;
-    }
-
-    buttons.push(
-      <Pressable
-        key="comment"
-        style={styles.interactionButton}
-        onPress={() => handlePostPress(post)}
-      >
-        <Text style={styles.interactionButtonText}>💬 Comment</Text>
-      </Pressable>
-    );
+  const renderImageWithFallback = (imagePath, style) => {
+    const imageUrl = getImageUrl(imagePath);
+    
+    if (!imageUrl) return null;
 
     return (
-      <View style={styles.interactionButtonsRow}>
-        {buttons}
-      </View>
+      <Image 
+        source={{ uri: imageUrl }} 
+        style={style}
+        onError={(error) => {
+          console.log('Image load error:', error.nativeEvent.error);
+          console.log('Failed image URL:', imageUrl);
+        }}
+        onLoad={() => {
+          console.log('Image loaded successfully:', imageUrl);
+        }}
+        resizeMode="cover"
+      />
     );
+  };
+
+  const getAreaOptions = () => {
+    const areas = [{ value: '', label: 'All Areas', icon: '🌍' }];
+    boards.forEach(board => {
+      areas.push({
+        value: board.title,
+        label: `${board.title} (${board.posts || 0})`,
+        icon: '📍'
+      });
+    });
+    return areas;
   };
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#1e90ff" />
-        <Text style={styles.loadingText}>Loading community...</Text>
-      </View>
+      <SafeAreaView style={styles.page}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#6366f1" />
+          <Text style={styles.loadingText}>Loading community...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorText}>{error}</Text>
-        <Pressable style={styles.retryButton} onPress={retryFetch}>
-          <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
-      </View>
+      <SafeAreaView style={styles.page}>
+        <View style={styles.centered}>
+          <Text style={styles.errorEmoji}>😕</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <Pressable style={styles.retryButton} onPress={retryFetch}>
+            <Text style={styles.retryText}>Try Again</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <UserProtectedRoute>
       <SafeAreaView style={styles.page}>
-      <View style={styles.headerBar}>
-        <Pressable
-          accessibilityRole="button"
-          hitSlop={8}
-          style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
-          onPress={() => router.push('/user-homepage')}
-        >
-          <Text style={styles.backButtonText}>← Back</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>UrbanFix Community</Text>
-        <Pressable
-          accessibilityRole="button"
-          hitSlop={8}
-          style={({ pressed }) => [styles.adminButton, pressed && { opacity: 0.85 }]}
-          onPress={() => router.push('/admin-login')}
-        >
-          <Text style={styles.adminButtonText}>Admin</Text>
-        </Pressable>
-      </View>
-
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-        <View style={styles.tagsRow}>
-          {[
-            { label: 'All Posts', route: '/discussions' },
-            { label: 'Trending 🔥', route: '/trending' },
-            { label: 'Recent 🆕', route: '/recent' },
-            { label: 'My Area ⭐', route: '/my-area' },
-          ].map((tag) => (
-            <Pressable
-              key={tag.label}
-              style={({ pressed }) => [styles.tagButton, pressed && { backgroundColor: '#f2f2f2' }]}
-              onPress={() => router.push(tag.route)}
-            >
-              <Text style={styles.tagText}>{tag.label}</Text>
-            </Pressable>
-          ))}
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.push('/user-homepage')}
+          >
+            <Text style={styles.backIcon}>←</Text>
+          </Pressable>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Community</Text>
+            <Text style={styles.headerSubtitle}>{filteredDiscussions.length} posts</Text>
+          </View>
+          <Pressable
+            style={styles.settingsButton}
+            onPress={() => router.push('/admin-login')}
+          >
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </Pressable>
         </View>
 
-        <Text style={styles.sectionTitle}>Browse by Location</Text>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={boards}
-          keyExtractor={(item, index) => item._id || index.toString()}
-          renderItem={({ item }) => (
+        {/* Enhanced Filter Bar */}
+        <View style={styles.filterBar}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterContainer}
+          >
+            {/* Sort By Dropdown */}
             <Pressable
-              style={({ pressed }) => [
-                styles.boardCard, 
-                pressed && { transform: [{ scale: 0.97 }] },
-                item.posts === 0 && styles.emptyBoardCard
-              ]}
-              onPress={() => handleBoardPress(item)}
+              style={styles.filterDropdown}
+              onPress={() => setShowSortModal(true)}
             >
-              <View style={styles.boardImageContainer}>
-                {item.image ? (
-                  <Image source={{ uri: item.image }} style={styles.boardImage} />
-                ) : (
-                  <View style={[
-                    styles.boardImage, 
-                    styles.placeholderImage,
-                    item.posts === 0 && styles.emptyPlaceholderImage
+              <Text style={styles.filterDropdownEmoji}>🔄</Text>
+              <Text style={styles.filterDropdownText}>
+                {sortOptions.find(s => s.value === sortBy)?.label || 'Sort'}
+              </Text>
+              <Text style={styles.filterDropdownArrow}>▼</Text>
+            </Pressable>
+
+            {/* Category Filter Dropdown */}
+            <Pressable
+              style={[styles.filterDropdown, filterCategory && styles.filterDropdownActive]}
+              onPress={() => setShowCategoryModal(true)}
+            >
+              <Text style={styles.filterDropdownEmoji}>📂</Text>
+              <Text style={styles.filterDropdownText}>
+                {filterCategory || 'Category'}
+              </Text>
+              <Text style={styles.filterDropdownArrow}>▼</Text>
+            </Pressable>
+
+            {/* Urgency Filter Dropdown */}
+            <Pressable
+              style={[styles.filterDropdown, filterUrgency && styles.filterDropdownActive]}
+              onPress={() => setShowUrgencyModal(true)}
+            >
+              <Text style={styles.filterDropdownEmoji}>⚡</Text>
+              <Text style={styles.filterDropdownText}>
+                {urgencyOptions.find(u => u.value === filterUrgency)?.label || 'Priority'}
+              </Text>
+              <Text style={styles.filterDropdownArrow}>▼</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+
+        {/* Active Filters */}
+        {renderFilterChips()}
+
+        {/* Content */}
+        <View style={styles.content}>
+          {/* Location Selection - Back to original style */}
+          {boards.length > 0 && (
+            <View style={styles.locationSection}>
+              <Text style={styles.sectionLabel}>Browse by area:</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.locationContainer}
+              >
+                <Pressable
+                  style={[
+                    styles.locationChip,
+                    !filterArea && styles.locationChipSelected
+                  ]}
+                  onPress={() => setFilterArea('')}
+                >
+                  <Text style={[
+                    styles.locationChipText,
+                    !filterArea && styles.locationChipTextSelected
                   ]}>
-                    <Text style={[
-                      styles.placeholderText,
-                      item.posts === 0 && styles.emptyPlaceholderText
-                    ]}>
-                      {(item.title || 'U').charAt(0)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[
-                styles.boardTitle,
-                item.posts === 0 && styles.emptyBoardTitle
-              ]}>
-                {item.title}
-              </Text>
-              <Text style={[
-                styles.boardPosts,
-                item.posts === 0 && styles.emptyBoardPosts
-              ]}>
-                {item.posts === 0 ? 'No posts yet' : `${item.posts} post${item.posts !== 1 ? 's' : ''}`}
-              </Text>
-            </Pressable>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No location boards available</Text>
-              <Text style={styles.emptySubtext}>Create a post to start a new location board!</Text>
-            </View>
-          }
-        />
-
-        <Text style={styles.sectionTitle}>Recent Discussions</Text>
-        {discussions.length > 0 ? (
-          discussions.slice(0, 10).map((d, index) => (
-            <Pressable
-              key={d._id || index}
-              style={({ pressed }) => [
-                styles.discussionCard,
-                pressed && { transform: [{ scale: 0.98 }] }
-              ]}
-              onPress={() => handlePostPress(d)}
-            >
-              <View style={styles.discussionHeader}>
-                {renderPostTypeIndicator(d)}
-                {!!d.location && <Text style={styles.locationText}>📍 {d.location}</Text>}
-              </View>
-
-              {d.image && <Image source={{ uri: d.image }} style={styles.discussionImage} resizeMode="cover" />}
-
-              <View style={styles.discussionContent}>
-                <Text style={styles.discussionTitle}>{d.title}</Text>
-                {!!d.description && (
-                  <Text style={styles.discussionDescription} numberOfLines={2}>
-                    {d.description}
+                    All Areas
                   </Text>
-                )}
+                </Pressable>
                 
-                {/* Render type-specific preview */}
-                {renderPostPreview(d)}
+                {/* My Area - Hardcoded to Dhanmondi */}
+                <Pressable
+                  style={[
+                    styles.locationChip,
+                    filterArea === 'Dhanmondi' && styles.locationChipSelected
+                  ]}
+                  onPress={() => setFilterArea('Dhanmondi')}
+                >
+                  <Text style={[
+                    styles.locationChipText,
+                    filterArea === 'Dhanmondi' && styles.locationChipTextSelected
+                  ]}>
+                    My Area (Dhanmondi)
+                  </Text>
+                </Pressable>
                 
-                <Text style={styles.discussionAuthor}>
-                  By {d.author || 'Anonymous'} • {formatTimeAgo(d.createdAt || d.time)}
-                </Text>
-                
-                <Text style={styles.commentsCount}>
-                  💬 {d.comments?.length || 0} comments
-                </Text>
-                
-                {/* Render interaction buttons */}
-                {renderInteractionButtons(d)}
-                
-                <View style={styles.actionsRow}>
-                  {(() => {
-                    const isReported = !!reportedMap[d._id];
-                    if (isReported) {
-                      return (
-                        <View style={{ flexDirection: 'row', gap: 8 }}>
-                          <Pressable accessibilityRole="button" disabled style={[styles.outlineButton, styles.outlineButtonDisabled]}>
-                            <Text style={[styles.outlineButtonText, styles.outlineButtonTextDisabled]}>Reported</Text>
-                          </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
-                            style={({ pressed }) => [styles.outlineButton, pressed && { backgroundColor: '#f2f2f2' }]}
-                            onPress={() => handleRevoke(d._id)}
-                          >
-                            <Text style={styles.outlineButtonText}>Revoke</Text>
-                          </Pressable>
-                        </View>
-                      );
-                    }
-                    return (
-                      <Pressable
-                        accessibilityRole="button"
-                        style={({ pressed }) => [styles.outlineButton, pressed && { backgroundColor: '#f2f2f2' }]}
-                        onPress={() => handleReport(d._id)}
-                      >
-                        <Text style={styles.outlineButtonText}>Report</Text>
-                      </Pressable>
-                    );
-                  })()}
-                </View>
-              </View>
-            </Pressable>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No discussions yet</Text>
-            <Text style={styles.emptySubtext}>Be the first to start a conversation!</Text>
-          </View>
-        )}
-      </ScrollView>
+                {boards.map((board) => (
+                  <Pressable
+                    key={board._id}
+                    style={[
+                      styles.locationChip,
+                      filterArea === board.title && styles.locationChipSelected
+                    ]}
+                    onPress={() => setFilterArea(board.title)}
+                  >
+                    <Text style={[
+                      styles.locationChipText,
+                      filterArea === board.title && styles.locationChipTextSelected
+                    ]}>
+                      {board.title}
+                      {board.posts > 0 && (
+                        <Text style={styles.postCount}> ({board.posts})</Text>
+                      )}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
-      <Pressable style={({ pressed }) => [styles.fab, pressed && { backgroundColor: '#187bcd' }]} onPress={() => router.push('/create-post')}>
-        <Text style={styles.fabText}>＋</Text>
-      </Pressable>
+          {/* Posts List */}
+          <View style={styles.postsSection}>
+            {filteredDiscussions.length > 0 ? (
+              <FlatList
+                data={filteredDiscussions}
+                keyExtractor={(item) => item._id}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.postsList}
+                renderItem={({ item: discussion }) => (
+                  <Pressable
+                    style={styles.postCard}
+                    onPress={() => handlePostPress(discussion)}
+                  >
+                    {/* Post Header */}
+                    <View style={styles.postHeader}>
+                      <View style={styles.postHeaderLeft}>
+                        {renderPostTypeIndicator(discussion)}
+                        {discussion.location && (
+                          <Text style={styles.locationTag}>📍 {discussion.location}</Text>
+                        )}
+                        {discussion.priority && discussion.priority !== 'normal' && (
+                          <View style={[
+                            styles.priorityBadge,
+                            { backgroundColor: urgencyOptions.find(u => u.value === discussion.priority)?.color + '20' }
+                          ]}>
+                            <Text style={[
+                              styles.priorityText,
+                              { color: urgencyOptions.find(u => u.value === discussion.priority)?.color }
+                            ]}>
+                              {urgencyOptions.find(u => u.value === discussion.priority)?.icon}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.timeText}>{formatTimeAgo(discussion.createdAt)}</Text>
+                    </View>
+
+                    {/* Post Title */}
+                    <Text style={styles.postTitle} numberOfLines={2}>
+                      {discussion.title}
+                    </Text>
+
+                    {/* Post Description */}
+                    {discussion.description && (
+                      <Text style={styles.postDescription} numberOfLines={2}>
+                        {discussion.description}
+                      </Text>
+                    )}
+
+                    {/* Post Image */}
+                    {discussion.image && (
+                      <View style={styles.imageContainer}>
+                        {renderImageWithFallback(discussion.image, styles.postImage)}
+                      </View>
+                    )}
+
+                    {/* Post Preview Info */}
+                    {renderPostPreview(discussion)}
+
+                    {/* Post Footer */}
+                    <View style={styles.postFooter}>
+                      <View style={styles.postMeta}>
+                        <Text style={styles.authorText}>By {discussion.author || 'Anonymous'}</Text>
+                        <View style={styles.engagementStats}>
+                          <Text style={styles.statsText}>
+                            ❤️ {discussion.likes?.length || 0}
+                          </Text>
+                          <Text style={styles.statsText}>
+                            💬 {discussion.comments?.length || 0}
+                          </Text>
+                          <Text style={styles.popularityScore}>
+                            🔥 {Math.round(calculatePopularityScore(discussion))}
+                          </Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.actionButtons}>
+                        {/* Special Help button for Reports with high priority */}
+                        {discussion.type === 'Report' && (discussion.priority === 'high' || discussion.priority === 'urgent') && (() => {
+                          const currentUserName = getCurrentUser();
+                          const userIsHelping = discussion.helpers?.some(h => h.username === currentUserName);
+                          
+                          return (
+                            <Pressable
+                              style={[
+                                styles.helpButton,
+                                userIsHelping && styles.helpButtonActive
+                              ]}
+                              onPress={() => handleOfferHelp(discussion._id)}
+                            >
+                              <Text style={[
+                                styles.helpButtonText,
+                                userIsHelping && styles.helpButtonTextActive
+                              ]}>
+                                {userIsHelping ? '✓ Helping' : '🆘 Help'}
+                              </Text>
+                            </Pressable>
+                          );
+                        })()}
+                        
+                        <Pressable
+                          style={[
+                            styles.reportButton,
+                            reportedMap[discussion._id] && styles.reportButtonReported
+                          ]}
+                          onPress={() => {
+                            const isReported = !!reportedMap[discussion._id];
+                            isReported ? handleRevoke(discussion._id) : handleReport(discussion._id);
+                          }}
+                        >
+                          <Text style={[
+                            styles.reportButtonText,
+                            reportedMap[discussion._id] && styles.reportButtonTextReported
+                          ]}>
+                            {reportedMap[discussion._id] ? '✓' : '⚠️'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </Pressable>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyEmoji}>💭</Text>
+                    <Text style={styles.emptyTitle}>No posts found</Text>
+                    <Text style={styles.emptySubtitle}>Try adjusting your filters or be the first to post!</Text>
+                  </View>
+                }
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>💭</Text>
+                <Text style={styles.emptyTitle}>No posts yet</Text>
+                <Text style={styles.emptySubtitle}>Start the conversation!</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Create Post Button */}
+        <Pressable 
+          style={styles.createButton} 
+          onPress={() => router.push('/create-post')}
+        >
+          <Text style={styles.createButtonText}>+ Create Post</Text>
+        </Pressable>
+
+        {/* Dropdown Modals */}
+        {renderDropdownModal(
+          showSortModal,
+          () => setShowSortModal(false),
+          sortOptions,
+          sortBy,
+          setSortBy,
+          'Sort Posts By'
+        )}
+
+        {renderDropdownModal(
+          showCategoryModal,
+          () => setShowCategoryModal(false),
+          categoryOptions,
+          filterCategory,
+          setFilterCategory,
+          'Filter by Category'
+        )}
+
+        {renderDropdownModal(
+          showUrgencyModal,
+          () => setShowUrgencyModal(false),
+          urgencyOptions,
+          filterUrgency,
+          setFilterUrgency,
+          'Filter by Priority'
+        )}
       </SafeAreaView>
     </UserProtectedRoute>
   );
 };
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#f9f9f9' },
+  page: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  
+  // Loading & Error States
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9f9f9',
+    padding: 32,
   },
-  loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
-  errorText: { fontSize: 16, color: '#e74c3c', textAlign: 'center', marginBottom: 20 },
-  retryButton: { backgroundColor: '#1e90ff', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  retryText: { color: '#fff', fontWeight: '600' },
-  headerBar: {
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  errorEmoji: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  retryButton: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+
+  // Header
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
   backButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    minWidth: 72,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  backButtonText: {
-    color: '#1e90ff',
-    fontSize: 14,
-    fontWeight: '600',
+  backIcon: {
+    fontSize: 18,
+    color: '#64748b',
   },
-  adminButton: {
-    backgroundColor: '#1e90ff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    minWidth: 72,
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
   },
-  adminButtonText: {
-    color: '#fff',
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  headerSubtitle: {
     fontSize: 12,
-    fontWeight: '600',
+    color: '#64748b',
+    marginTop: 2,
   },
-  tagsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 20,
-    gap: 8,
+  settingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  tagButton: {
+  settingsIcon: {
+    fontSize: 16,
+  },
+
+  // Enhanced Filter Bar
+  filterBar: {
     backgroundColor: '#fff',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  filterContainer: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  filterDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e2e8f0',
+    minWidth: 100,
   },
-  tagText: {
+  filterDropdownActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  filterDropdownEmoji: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  filterDropdownText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748b',
+    flex: 1,
+  },
+  filterDropdownArrow: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginLeft: 4,
+  },
+
+  // Active Filters
+  activeFiltersSection: {
+    backgroundColor: '#fff',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  activeFiltersLabel: {
     fontSize: 12,
-    color: '#666',
+    color: '#64748b',
+    marginBottom: 8,
     fontWeight: '500',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-    paddingHorizontal: 16,
-  },
-  boardCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 8,
-    marginBottom: 16,
-    borderRadius: 12,
-    padding: 12,
-    width: 120,
+  activeFiltersContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    gap: 8,
   },
-  emptyBoardCard: {
-    opacity: 0.6,
+  activeFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
   },
-  boardImageContainer: {
-    marginBottom: 8,
+  activeFilterText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
+    marginRight: 6,
   },
-  boardImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
-  placeholderImage: {
-    backgroundColor: '#1e90ff',
+  removeFilterButton: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyPlaceholderImage: {
-    backgroundColor: '#ccc',
-  },
-  placeholderText: {
+  removeFilterText: {
+    fontSize: 12,
     color: '#fff',
-    fontSize: 24,
     fontWeight: 'bold',
   },
-  emptyPlaceholderText: {
-    color: '#999',
+  clearAllFiltersButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#ef4444',
   },
-  boardTitle: {
-    fontSize: 14,
+  clearAllFiltersText: {
+    fontSize: 12,
+    color: '#fff',
     fontWeight: '600',
-    color: '#333',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginBottom: 16,
     textAlign: 'center',
+  },
+  modalOptions: {
+    maxHeight: 300,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     marginBottom: 4,
   },
-  emptyBoardTitle: {
-    color: '#999',
+  modalOptionSelected: {
+    backgroundColor: '#eef2ff',
   },
-  boardPosts: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
+  modalOptionEmoji: {
+    fontSize: 16,
+    marginRight: 12,
+    width: 20,
   },
-  emptyBoardPosts: {
-    color: '#bbb',
+  modalOptionText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1e293b',
   },
-  discussionCard: {
+  modalOptionTextSelected: {
+    color: '#6366f1',
+    fontWeight: '600',
+  },
+  modalOptionCheck: {
+    fontSize: 16,
+    color: '#6366f1',
+    fontWeight: 'bold',
+  },
+
+  // Content Layout
+  content: {
+    flex: 1,
+  },
+
+  // Posts Section
+  postsSection: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  postsList: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+
+  // Post Cards
+  postCard: {
     backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 12,
     borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
-  discussionHeader: {
+  postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingBottom: 8,
+    marginBottom: 12,
   },
-  typePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+  postHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  typeEmoji: {
+    fontSize: 12,
+    marginRight: 4,
   },
   typeText: {
     fontSize: 12,
     fontWeight: '600',
   },
-  locationText: {
+  locationTag: {
     fontSize: 12,
-    color: '#666',
+    color: '#64748b',
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  priorityBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  priorityText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#94a3b8',
     fontWeight: '500',
   },
-  discussionImage: {
-    width: '100%',
-    height: 200,
-  },
-  discussionContent: {
-    padding: 16,
-  },
-  discussionTitle: {
+  postTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: '#1e293b',
+    lineHeight: 22,
     marginBottom: 8,
   },
-  discussionDescription: {
+  postDescription: {
     fontSize: 14,
-    color: '#666',
+    color: '#64748b',
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  postPreview: {
+  imageContainer: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  postImage: {
+    width: '100%',
+    height: 180,
+  },
+  previewContainer: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  previewText: {
     fontSize: 13,
-    color: '#1e90ff',
+    color: '#475569',
     fontWeight: '500',
-    marginBottom: 8,
   },
-  discussionAuthor: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 8,
-  },
-  commentsCount: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 12,
-  },
-  interactionButtonsRow: {
+  postFooter: {
     flexDirection: 'row',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  postMeta: {
+    flex: 1,
+  },
+  authorText: {
+    fontSize: 13,
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  engagementStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statsText: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  popularityScore: {
+    fontSize: 12,
+    color: '#f59e0b',
+    fontWeight: '600',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  interactionButton: {
-    backgroundColor: '#f0f8ff',
+  helpButton: {
+    backgroundColor: '#f59e0b',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1e90ff',
   },
-  interactionButtonText: {
+  helpButtonActive: {
+    backgroundColor: '#22c55e',
+  },
+  helpButtonText: {
+    color: '#fff',
     fontSize: 12,
-    color: '#1e90ff',
-    fontWeight: '500',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  outlineButton: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-  },
-  outlineButtonDisabled: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#ccc',
-  },
-  outlineButtonText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
-  outlineButtonTextDisabled: {
-    color: '#999',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 32,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
     fontWeight: '600',
-    marginBottom: 8,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#bbb',
-    textAlign: 'center',
+  helpButtonTextActive: {
+    color: '#fff',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#1e90ff',
+  reportButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
   },
-  fabText: {
+  reportButtonReported: {
+    backgroundColor: '#dcfce7',
+  },
+  reportButtonText: {
+    fontSize: 12,
+  },
+  reportButtonTextReported: {
+    color: '#16a34a',
+  },
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyEmoji: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  // Create Button
+  createButton: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: '#6366f1',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  createButtonText: {
     color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+    locationSection: {
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  sectionLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  locationContainer: {
+    gap: 8,
+  },
+  locationChip: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginRight: 8,
+  },
+  locationChipSelected: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  locationChipText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  locationChipTextSelected: {
+    color: '#6366f1',
+    fontWeight: '600',
+  },
+  postCount: {
+    color: '#94a3b8',
+    fontSize: 12,
   },
 });
 
 export default CommunityHome;
+  
