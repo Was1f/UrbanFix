@@ -23,12 +23,38 @@ const UserProtectedRoute = ({ children, fallbackComponent }) => {
         console.log('❌ User not authenticated or session expired, redirecting to login');
         // Clear the user state and redirect to login
         await logout();
+        // Wait for multiple frames to ensure the layout is fully ready
+        await new Promise(resolve => {
+          let frameCount = 0;
+          const checkFrame = () => {
+            frameCount++;
+            if (frameCount >= 3) {
+              resolve();
+            } else {
+              requestAnimationFrame(checkFrame);
+            }
+          };
+          requestAnimationFrame(checkFrame);
+        });
         router.replace('/PhoneLogin');
       }
     } catch (error) {
       console.error('❌ Error checking user authentication:', error);
       // Clear session on error and redirect to login
       await logout();
+      // Wait for multiple frames to ensure the layout is fully ready
+      await new Promise(resolve => {
+        let frameCount = 0;
+        const checkFrame = () => {
+          frameCount++;
+          if (frameCount >= 3) {
+            resolve();
+          } else {
+            requestAnimationFrame(checkFrame);
+          }
+        };
+        requestAnimationFrame(checkFrame);
+      });
       router.replace('/PhoneLogin');
     } finally {
       setIsLoading(false);

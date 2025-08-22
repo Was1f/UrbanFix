@@ -2,14 +2,12 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SessionManager from '../utils/sessionManager';
-import { useRouter } from 'expo-router';
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
   // Load user from SessionManager on mount
   useEffect(() => {
@@ -57,7 +55,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout: clear user from context and SessionManager, then route to login
+  // Logout: clear user from context and SessionManager
   const logout = async () => {
     try {
       await SessionManager.clearUserSession();
@@ -65,41 +63,11 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       console.log('✅ [AuthContext] User logged out successfully');
       
-      // Route to login page after successful logout and clear navigation stack
-      console.log('🔄 [AuthContext] Routing to login page and clearing navigation stack...');
-      
-      // For expo-router, we need to completely reset the navigation stack
-      // This prevents users from going back to authenticated pages
-      try {
-        // First try to navigate to root which should trigger our index.js logic
-        router.navigate('/');
-        
-        // If that doesn't work, try replace with PhoneLogin
-        setTimeout(() => {
-          router.replace('/PhoneLogin');
-        }, 100);
-      } catch (navError) {
-        console.log('🔄 [AuthContext] Fallback: using direct replace...');
-        router.replace('/PhoneLogin');
-      }
+      // Note: Navigation will be handled by the components that use this context
+      // Components should watch for user state changes and navigate accordingly
       
     } catch (err) {
       console.log('❌ [AuthContext] Failed to clear user session:', err);
-      // Even if session clearing fails, still try to route to login
-      try {
-        router.navigate('/');
-        setTimeout(() => {
-          router.replace('/PhoneLogin');
-        }, 100);
-      } catch (routingError) {
-        console.log('❌ [AuthContext] Failed to route to login page:', routingError);
-        // Final fallback
-        try {
-          router.replace('/PhoneLogin');
-        } catch (finalError) {
-          console.log('❌ [AuthContext] All routing methods failed:', finalError);
-        }
-      }
     }
   };
 

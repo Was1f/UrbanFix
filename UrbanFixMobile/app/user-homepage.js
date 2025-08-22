@@ -31,16 +31,25 @@ export default function UserHomepage() {
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const announcementFlatListRef = useRef(null);
   const [lastAnnouncementCheck, setLastAnnouncementCheck] = useState(null);
+  const [isComponentMounted, setIsComponentMounted] = useState(false);
 
-  // Immediate authentication check on component mount
+  // Mark component as mounted
   useEffect(() => {
+    setIsComponentMounted(true);
+  }, []);
+
+  // Authentication check that only runs after component is mounted
+  useEffect(() => {
+    if (!isComponentMounted) return;
+    
     const checkAuthOnMount = async () => {
       console.log('🔒 [UserHomepage] Checking authentication on mount...');
       
       // Check if user exists
       if (!user) {
         console.log('🔒 [UserHomepage] No user found, redirecting to login');
-        router.replace('/PhoneLogin');
+        // Instead of navigating immediately, set a flag and let the component handle it
+        // This avoids the navigation timing issue
         return;
       }
 
@@ -56,15 +65,35 @@ export default function UserHomepage() {
     };
 
     checkAuthOnMount();
-  }, []); // Empty dependency array to run only on mount
+  }, [isComponentMounted, user, checkSessionValidity, router]); // Dependencies include isComponentMounted
 
   // Watch for user state changes (like logout)
   useEffect(() => {
+    if (!isComponentMounted) return;
+    
     if (!user) {
       console.log('🔒 [UserHomepage] User state changed to null, redirecting to login');
-      router.replace('/PhoneLogin');
+      // Instead of navigating immediately, set a flag and let the component handle it
+      // This avoids the navigation timing issue
     }
-  }, [user, router]);
+  }, [isComponentMounted, user, router]);
+
+  // Handle navigation after component is properly mounted
+  useEffect(() => {
+    if (!isComponentMounted || user) return;
+    
+    // Wait a bit longer to ensure navigation is ready
+    const timer = setTimeout(() => {
+      try {
+        console.log('🔒 [UserHomepage] Now attempting navigation to login...');
+        router.replace('/PhoneLogin');
+      } catch (error) {
+        console.error('🔒 [UserHomepage] Navigation failed:', error);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [isComponentMounted, user, router]);
 
   useEffect(() => {
     let isMounted = true;
@@ -212,6 +241,18 @@ export default function UserHomepage() {
       </View>
     );
   };
+
+  // If user is not authenticated, show a message instead of trying to navigate
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Redirecting to login...</Text>
+          <Text style={styles.loadingSubtext}>Please wait while we redirect you to the login page.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <UserProtectedRoute>
@@ -566,6 +607,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   seeMoreText: { color: '#111', fontWeight: '600' },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
 });
 
 

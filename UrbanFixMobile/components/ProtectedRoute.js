@@ -19,10 +19,36 @@ const ProtectedRoute = ({ children, fallbackComponent }) => {
       
       if (!isLoggedIn) {
         console.log('❌ User not authenticated, redirecting to login');
+        // Wait for multiple frames to ensure the layout is fully ready
+        await new Promise(resolve => {
+          let frameCount = 0;
+          const checkFrame = () => {
+            frameCount++;
+            if (frameCount >= 3) {
+              resolve();
+            } else {
+              requestAnimationFrame(checkFrame);
+            }
+          };
+          requestAnimationFrame(checkFrame);
+        });
         router.replace('/admin-login');
       }
     } catch (error) {
       console.error('❌ Error checking authentication:', error);
+      // Wait for multiple frames to ensure the layout is fully ready
+      await new Promise(resolve => {
+        let frameCount = 0;
+        const checkFrame = () => {
+          frameCount++;
+          if (frameCount >= 3) {
+            resolve();
+          } else {
+            requestAnimationFrame(checkFrame);
+          }
+        };
+        requestAnimationFrame(checkFrame);
+      });
       router.replace('/admin-login');
     } finally {
       setIsLoading(false);

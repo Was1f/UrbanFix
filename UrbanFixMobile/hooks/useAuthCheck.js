@@ -24,6 +24,20 @@ export const useAuthCheck = (options = {}) => {
   useEffect(() => {
     const checkAuth = async () => {
       if (!loading) {
+        // Wait for multiple frames to ensure the layout is fully ready
+        await new Promise(resolve => {
+          let frameCount = 0;
+          const checkFrame = () => {
+            frameCount++;
+            if (frameCount >= 3) {
+              resolve();
+            } else {
+              requestAnimationFrame(checkFrame);
+            }
+          };
+          requestAnimationFrame(checkFrame);
+        });
+        
         if (!user && redirectOnLoad) {
           console.log('🔒 [useAuthCheck] User not authenticated, redirecting to login');
           router.replace('/PhoneLogin');

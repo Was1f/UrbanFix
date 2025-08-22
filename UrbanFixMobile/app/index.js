@@ -14,8 +14,20 @@ export default function IndexScreen() {
         
         if (!user) {
           console.log('🔍 [Index] No user, redirecting to login');
-          // Prevent back navigation by using replace
-          router.replace('/PhoneLogin');
+          // Use a more robust navigation approach
+          try {
+            router.replace('/PhoneLogin');
+          } catch (error) {
+            console.log('🔍 [Index] Navigation failed, trying alternative approach');
+            // If that fails, try a different approach
+            setTimeout(() => {
+              try {
+                router.replace('/PhoneLogin');
+              } catch (navError) {
+                console.error('🔍 [Index] All navigation attempts failed:', navError);
+              }
+            }, 100);
+          }
           return;
         }
 
@@ -27,7 +39,18 @@ export default function IndexScreen() {
         }
 
         console.log('🔍 [Index] User authenticated, redirecting to dashboard');
-        router.replace('/user-homepage');
+        try {
+          router.replace('/user-homepage');
+        } catch (error) {
+          console.log('🔍 [Index] Navigation to dashboard failed, trying alternative approach');
+          setTimeout(() => {
+            try {
+              router.replace('/user-homepage');
+            } catch (navError) {
+              console.error('🔍 [Index] All navigation attempts to dashboard failed:', navError);
+            }
+          }, 100);
+        }
       }
     };
 
