@@ -663,10 +663,13 @@ router.patch('/:discussionId/comments/:commentId', async (req, res) => {
 });
 
 // Delete discussion (only by author)
+// Make sure your route is properly defined
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { author } = req.body;
+    
+    console.log('DELETE request received:', { id, author });
     
     if (!isValidObjectId(id)) {
       return res.status(400).json({ message: 'Invalid discussion ID' });
@@ -678,9 +681,17 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Discussion not found' });
     }
 
-    // Only allow the author to delete their own post
-    if (discussion.author !== author) {
-      return res.status(403).json({ message: 'You can only delete your own posts' });
+    console.log('Found discussion:', discussion.title);
+    console.log('Discussion author:', discussion.author);
+    console.log('Request author:', author);
+
+    // Check exact match for author
+    if (discussion.author.trim() !== author.trim()) {
+      return res.status(403).json({ 
+        message: 'You can only delete your own posts',
+        discussionAuthor: discussion.author,
+        requestAuthor: author
+      });
     }
 
     await Discussion.findByIdAndDelete(id);
@@ -698,5 +709,4 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: 'Error deleting discussion' });
   }
 });
-
 module.exports = router;

@@ -34,6 +34,11 @@ const UserSchema = new mongoose.Schema({
     type: String, 
     trim: true 
   },
+  location: {
+    type: String,
+    trim: true,
+    default: 'Dhanmondi' // Default to Dhanmondi as mentioned in your UI
+  },
   nid: { 
     type: String, 
     trim: true 
@@ -46,7 +51,6 @@ const UserSchema = new mongoose.Schema({
     type: Boolean, 
     default: true 
   },
-  // Add after your existing fields, before timestamps
   points: {
     total: { type: Number, default: 0 },
     weekly: { type: Number, default: 0 },
@@ -63,12 +67,12 @@ const UserSchema = new mongoose.Schema({
     volunteered: { type: Number, default: 0 },
     pollsVoted: { type: Number, default: 0 }
   }
-
 }, {
   timestamps: true
 });
 
-// Index for efficient phone lookup
+// Indexes for efficient lookups
 UserSchema.index({ phone: 1 });
+UserSchema.index({ location: 1 });
 
 module.exports = mongoose.model('User', UserSchema);

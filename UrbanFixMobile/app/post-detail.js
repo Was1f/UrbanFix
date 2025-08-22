@@ -501,6 +501,7 @@ const PostDetail = () => {
   };
 
   const handleDeletePost = () => {
+    console.log('DELETE BUTTON PRESSED!');
     Alert.alert(
       'Delete Post',
       'Are you sure you want to delete this post? This action cannot be undone.',
@@ -517,23 +518,70 @@ const PostDetail = () => {
 
   const confirmDeletePost = async () => {
     try {
-      const response = await fetch(apiUrl(`/api/discussions/${postId}`), {
+      // Validate postId before making request
+      if (!postId || postId === 'undefined' || postId === 'null') {
+        Alert.alert('Error', 'Invalid post ID');
+        return;
+      }
+
+      const currentUser = getCurrentUser();
+      console.log('=== DELETE REQUEST DEBUG ===');
+      console.log('Deleting post with ID:', postId);
+      console.log('Current user:', JSON.stringify(currentUser));
+      console.log('Post author:', JSON.stringify(post.author));
+      console.log('Are they exactly equal?', post.author === currentUser);
+      console.log('Author type:', typeof post.author);
+      console.log('Current user type:', typeof currentUser);
+      console.log('Author length:', post.author?.length);
+      console.log('Current user length:', currentUser?.length);
+
+      const requestBody = { author: currentUser };
+      console.log('Request body:', JSON.stringify(requestBody));
+
+      const apiUrlToUse = apiUrl(`/api/discussions/${postId}`);
+      console.log('API URL:', apiUrlToUse);
+
+      const response = await fetch(apiUrlToUse, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ author: getCurrentUser() })
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+
       if (response.ok) {
+        const responseData = await response.json();
+        console.log('Success response:', responseData);
+        
         Alert.alert('Success', 'Post deleted successfully', [
-          { text: 'OK', onPress: () => router.back() }
+          { 
+            text: 'OK', 
+            onPress: () => {
+              router.replace('/community');
+            }
+          }
         ]);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to delete post');
+        const responseText = await response.text();
+        console.log('Error response text:', responseText);
+        
+        let errorMessage;
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.message || 'Unknown error';
+        } catch (parseError) {
+          errorMessage = responseText || 'Unknown error';
+        }
+        
+        console.log('Parsed error message:', errorMessage);
+        Alert.alert('Delete Failed', errorMessage);
       }
     } catch (error) {
-      console.error('Error deleting post:', error);
-      Alert.alert('Error', error.message || 'Failed to delete post');
+      console.error('Network or other error:', error);
+      Alert.alert('Error', `Network error: ${error.message}`);
     }
   };
 
@@ -833,12 +881,20 @@ const PostDetail = () => {
           {post.author === getCurrentUser() && (
             <Pressable 
               style={styles.deleteButton} 
-              onPress={handleDeletePost}
+              onPress={() => {
+                console.log('Delete button tapped!');
+                handleDeletePost();
+              }}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
             >
               <Text style={styles.deleteIcon}>🗑️</Text>
             </Pressable>
           )}
-          <Pressable style={styles.shareButton} onPress={handleShare}>
+          <Pressable 
+            style={styles.shareButton} 
+            onPress={handleShare}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Text style={styles.shareIcon}>📤</Text>
           </Pressable>
         </View>
@@ -1028,6 +1084,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   deleteIcon: {
     fontSize: 16,

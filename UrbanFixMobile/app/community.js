@@ -11,6 +11,7 @@ import {
   Pressable,
   Dimensions,
   SafeAreaView,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -26,42 +27,169 @@ const CommunityHome = () => {
 
   const [boards, setBoards] = useState([]);
   const [discussions, setDiscussions] = useState([]);
+  const [filteredDiscussions, setFilteredDiscussions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reportedMap, setReportedMap] = useState({});
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('');
-  const [selectedType, setSelectedType] = useState('');
+
+  // Enhanced filtering and sorting states
+  const [sortBy, setSortBy] = useState('popular'); // Start with popular as default
+  const [filterArea, setFilterArea] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterUrgency, setFilterUrgency] = useState('');
+  
+  // Modal states for dropdowns
+  const [showSortModal, setShowSortModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showUrgencyModal, setShowUrgencyModal] = useState(false);
+
+  // Filter and sort options
+  const sortOptions = [
+    { value: 'popular', label: 'Most Popular', icon: '🔥' },
+    { value: 'recent', label: 'Most Recent', icon: '🕒' },
+    { value: 'oldest', label: 'Oldest First', icon: '📅' },
+    { value: 'most_comments', label: 'Most Discussed', icon: '💬' },
+    { value: 'most_likes', label: 'Most Liked', icon: '❤️' },
+  ];
+
+  const categoryOptions = [
+    { value: '', label: 'All Categories', icon: '📋' },
+    { value: 'Report', label: 'Reports', icon: '🚨' },
+    { value: 'Poll', label: 'Polls', icon: '📊' },
+    { value: 'Event', label: 'Events', icon: '📅' },
+    { value: 'Donation', label: 'Donations', icon: '💝' },
+    { value: 'Volunteer', label: 'Volunteer', icon: '🤝' },
+  ];
+
+  const urgencyOptions = [
+    { value: '', label: 'All Priorities', icon: '⚡' },
+    { value: 'urgent', label: 'Urgent', icon: '🔴', color: '#ef4444' },
+    { value: 'high', label: 'High Priority', icon: '🟠', color: '#f97316' },
+    { value: 'medium', label: 'Medium Priority', icon: '🟡', color: '#eab308' },
+    { value: 'normal', label: 'Normal', icon: '🟢', color: '#22c55e' },
+    { value: 'low', label: 'Low Priority', icon: '🔵', color: '#3b82f6' },
+  ];
 
   // Get current user info
   const getCurrentUser = () => {
     if (!user) return 'Anonymous';
-    return user.phone; // Use phone as unique identifier since it's unique in your system
+    return user.phone;
   };
 
   // Helper function to construct proper image URLs
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
     
-    // If it's already a full URL, return as is
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return imagePath;
     }
     
-    // If it starts with /uploads, construct the full URL
     if (imagePath.startsWith('/uploads/')) {
       return apiUrl(imagePath);
     }
     
-    // If it's just a filename, assume it's in uploads/community
     if (!imagePath.startsWith('/')) {
       return apiUrl(`/uploads/community/${imagePath}`);
     }
     
-    // Default case
     return apiUrl(imagePath);
   };
+
+  // Calculate popularity score for sorting (enhanced algorithm)
+  const calculatePopularityScore = (discussion) => {
+    const now = new Date();
+    const postDate = new Date(discussion.createdAt);
+    const hoursAge = Math.max(1, (now - postDate) / (1000 * 60 * 60)); // Minimum 1 hour
+    
+    // Base engagement metrics
+    const likes = discussion.likes?.length || 0;
+    const comments = discussion.comments?.length || 0;
+    
+    // Weight different types of engagement
+    const likeWeight = 1;
+    const commentWeight = 3; // Comments are more valuable than likes
+    
+    // Priority/urgency multiplier
+    const urgencyMultipliers = {
+      'urgent': 4,
+      'high': 2.5,
+      'medium': 1.5,
+      'normal': 1,
+      'low': 0.8
+    };
+    const urgencyMultiplier = urgencyMultipliers[discussion.priority] || 1;
+    
+    // Post type multiplier (reports and events might need more visibility)
+    const typeMultipliers = {
+      'Report': 1.3,
+      'Event': 1.2,
+      'Donation': 1.1,
+      'Poll': 1,
+      'Volunteer': 1
+    };
+    const typeMultiplier = typeMultipliers[discussion.type] || 1;
+    
+    // Raw engagement score
+    const engagementScore = (likes * likeWeight) + (comments * commentWeight);
+    
+    // Time decay factor - newer posts get boost, but not too aggressive
+    const timeDecayFactor = Math.pow(hoursAge, -0.3); // Gentle decay
+    
+    // Velocity bonus for posts getting engagement quickly
+    const velocityBonus = hoursAge < 24 ? (engagementScore / Math.max(1, hoursAge)) * 0.1 : 0;
+    
+    // Final popularity score
+    const popularityScore = (
+      engagementScore * 
+      timeDecayFactor * 
+      urgencyMultiplier * 
+      typeMultiplier
+    ) + velocityBonus;
+    
+    return Math.max(0, popularityScore);
+  };
+
+  // Enhanced sorting and filtering function
+  const applySortingAndFiltering = useCallback(() => {
+    let filtered = [...discussions];
+
+    // Apply area filter
+    if (filterArea) {
+      filtered = filtered.filter(d => d.location === filterArea);
+    }
+
+    // Apply category filter
+    if (filterCategory) {
+      filtered = filtered.filter(d => d.type === filterCategory);
+    }
+
+    // Apply urgency filter
+    if (filterUrgency) {
+      filtered = filtered.filter(d => d.priority === filterUrgency);
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case 'popular':
+        filtered.sort((a, b) => calculatePopularityScore(b) - calculatePopularityScore(a));
+        break;
+      case 'oldest':
+        filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        break;
+      case 'most_comments':
+        filtered.sort((a, b) => (b.comments?.length || 0) - (a.comments?.length || 0));
+        break;
+      case 'most_likes':
+        filtered.sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0));
+        break;
+      case 'recent':
+      default:
+        filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        break;
+    }
+
+    setFilteredDiscussions(filtered);
+  }, [discussions, sortBy, filterArea, filterCategory, filterUrgency]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -105,6 +233,10 @@ const CommunityHome = () => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    applySortingAndFiltering();
+  }, [applySortingAndFiltering]);
+
   useFocusEffect(
     useCallback(() => {
       fetchData();
@@ -127,21 +259,15 @@ const CommunityHome = () => {
   };
 
   const handlePostPress = (post) => {
-    // Ensure we have a valid post ID
     if (!post._id) {
       Alert.alert('Error', 'Invalid post data');
       return;
     }
     
-    console.log('Navigating to post:', post._id); // Debug log
-    console.log('Full post object:', post); // Debug log
-    
-    // Try both navigation methods
     try {
       router.push(`/post-detail?postId=${post._id}`);
     } catch (error) {
       console.error('Navigation error:', error);
-      // Fallback navigation
       router.push({
         pathname: '/post-detail',
         params: { postId: post._id }
@@ -223,11 +349,9 @@ const CommunityHome = () => {
     try {
       const currentUserName = getCurrentUser();
       
-      // Find the current discussion to check if user already offered help
       const currentDiscussion = discussions.find(d => d._id === discussionId);
       const userAlreadyOfferedHelp = currentDiscussion?.helpers?.some(h => h.username === currentUserName);
       
-      // Choose the correct endpoint based on current state
       const endpoint = userAlreadyOfferedHelp ? 'withdraw-help' : 'offer-help';
       
       const response = await fetch(apiUrl(`/api/discussions/${discussionId}/${endpoint}`), {
@@ -238,7 +362,6 @@ const CommunityHome = () => {
 
       if (response.ok) {
         const updatedPost = await response.json();
-        // Update the discussions state with the new helper count
         setDiscussions(prev => prev.map(d => 
           d._id === discussionId ? updatedPost : d
         ));
@@ -264,9 +387,9 @@ const CommunityHome = () => {
       Event: { emoji: '📅', color: '#059669', bg: '#ecfdf5' },
       Donation: { emoji: '💝', color: '#dc2626', bg: '#fef2f2' },
       Volunteer: { emoji: '🤝', color: '#7c3aed', bg: '#f3e8ff' },
-      Report: { emoji: '🚨', color: '#ea580c', bg: '#fff7ed' }, // Changed to emergency/alert emoji
+      Report: { emoji: '🚨', color: '#ea580c', bg: '#fff7ed' },
     };
-    return configs[type] || { emoji: '📝', color: '#6b7280', bg: '#f9fafb' };
+    return configs[type] || { emoji: '📄', color: '#6b7280', bg: '#f9fafb' };
   };
 
   const renderPostTypeIndicator = (post) => {
@@ -275,6 +398,92 @@ const CommunityHome = () => {
       <View style={[styles.typeBadge, { backgroundColor: config.bg }]}>
         <Text style={[styles.typeEmoji]}>{config.emoji}</Text>
         <Text style={[styles.typeText, { color: config.color }]}>{post.type}</Text>
+      </View>
+    );
+  };
+
+  const renderDropdownModal = (visible, onClose, options, selectedValue, onSelect, title) => (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <ScrollView style={styles.modalOptions}>
+            {options.map((option) => (
+              <Pressable
+                key={option.value}
+                style={[
+                  styles.modalOption,
+                  selectedValue === option.value && styles.modalOptionSelected
+                ]}
+                onPress={() => {
+                  onSelect(option.value);
+                  onClose();
+                }}
+              >
+                <Text style={styles.modalOptionEmoji}>{option.icon}</Text>
+                <Text style={[
+                  styles.modalOptionText,
+                  selectedValue === option.value && styles.modalOptionTextSelected
+                ]}>
+                  {option.label}
+                </Text>
+                {selectedValue === option.value && (
+                  <Text style={styles.modalOptionCheck}>✓</Text>
+                )}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+
+  const renderFilterChips = () => {
+    const activeFilters = [];
+    
+    if (filterArea) activeFilters.push({ label: filterArea === 'Dhanmondi' ? 'My Area (Dhanmondi)' : filterArea, type: 'area' });
+    if (filterCategory) activeFilters.push({ label: filterCategory, type: 'category' });
+    if (filterUrgency) activeFilters.push({ label: urgencyOptions.find(u => u.value === filterUrgency)?.label, type: 'urgency' });
+    
+    if (activeFilters.length === 0) return null;
+
+    return (
+      <View style={styles.activeFiltersSection}>
+        <Text style={styles.activeFiltersLabel}>Active filters:</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.activeFiltersContainer}>
+            {activeFilters.map((filter, index) => (
+              <View key={index} style={styles.activeFilterChip}>
+                <Text style={styles.activeFilterText}>{filter.label}</Text>
+                <Pressable
+                  onPress={() => {
+                    if (filter.type === 'area') setFilterArea('');
+                    if (filter.type === 'category') setFilterCategory('');
+                    if (filter.type === 'urgency') setFilterUrgency('');
+                  }}
+                  style={styles.removeFilterButton}
+                >
+                  <Text style={styles.removeFilterText}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Pressable
+              style={styles.clearAllFiltersButton}
+              onPress={() => {
+                setFilterArea('');
+                setFilterCategory('');
+                setFilterUrgency('');
+              }}
+            >
+              <Text style={styles.clearAllFiltersText}>Clear All</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </View>
     );
   };
@@ -365,44 +574,17 @@ const CommunityHome = () => {
     );
   };
 
-  const getFilteredDiscussions = () => {
-    let filtered = discussions;
-    
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(d => 
-        d.title?.toLowerCase().includes(query) ||
-        d.description?.toLowerCase().includes(query) ||
-        d.author?.toLowerCase().includes(query)
-      );
-    }
-    
-    // Filter by location
-    if (selectedLocation) {
-      filtered = filtered.filter(d => d.location === selectedLocation);
-    }
-    
-    // Filter by type
-    if (selectedType) {
-      filtered = filtered.filter(d => d.type === selectedType);
-    }
-    
-    // Filter by active filter
-    if (activeFilter !== 'all') {
-      filtered = filtered.filter(d => d.type.toLowerCase() === activeFilter);
-    }
-    
-    return filtered;
+  const getAreaOptions = () => {
+    const areas = [{ value: '', label: 'All Areas', icon: '🌍' }];
+    boards.forEach(board => {
+      areas.push({
+        value: board.title,
+        label: `${board.title} (${board.posts || 0})`,
+        icon: '📍'
+      });
+    });
+    return areas;
   };
-
-  const filters = [
-    { key: 'all', label: 'All', emoji: '📋' },
-    { key: 'poll', label: 'Polls', emoji: '📊' },
-    { key: 'event', label: 'Events', emoji: '📅' },
-    { key: 'donation', label: 'Help', emoji: '💝' },
-    { key: 'volunteer', label: 'Volunteer', emoji: '🤝' },
-  ];
 
   if (loading) {
     return (
@@ -432,7 +614,7 @@ const CommunityHome = () => {
   return (
     <UserProtectedRoute>
       <SafeAreaView style={styles.page}>
-        {/* Simplified Header */}
+        {/* Header */}
         <View style={styles.header}>
           <Pressable
             style={styles.backButton}
@@ -442,6 +624,7 @@ const CommunityHome = () => {
           </Pressable>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Community</Text>
+            <Text style={styles.headerSubtitle}>{filteredDiscussions.length} posts</Text>
           </View>
           <Pressable
             style={styles.settingsButton}
@@ -451,37 +634,57 @@ const CommunityHome = () => {
           </Pressable>
         </View>
 
+        {/* Enhanced Filter Bar */}
+        <View style={styles.filterBar}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterContainer}
+          >
+            {/* Sort By Dropdown */}
+            <Pressable
+              style={styles.filterDropdown}
+              onPress={() => setShowSortModal(true)}
+            >
+              <Text style={styles.filterDropdownEmoji}>🔄</Text>
+              <Text style={styles.filterDropdownText}>
+                {sortOptions.find(s => s.value === sortBy)?.label || 'Sort'}
+              </Text>
+              <Text style={styles.filterDropdownArrow}>▼</Text>
+            </Pressable>
+
+            {/* Category Filter Dropdown */}
+            <Pressable
+              style={[styles.filterDropdown, filterCategory && styles.filterDropdownActive]}
+              onPress={() => setShowCategoryModal(true)}
+            >
+              <Text style={styles.filterDropdownEmoji}>📂</Text>
+              <Text style={styles.filterDropdownText}>
+                {filterCategory || 'Category'}
+              </Text>
+              <Text style={styles.filterDropdownArrow}>▼</Text>
+            </Pressable>
+
+            {/* Urgency Filter Dropdown */}
+            <Pressable
+              style={[styles.filterDropdown, filterUrgency && styles.filterDropdownActive]}
+              onPress={() => setShowUrgencyModal(true)}
+            >
+              <Text style={styles.filterDropdownEmoji}>⚡</Text>
+              <Text style={styles.filterDropdownText}>
+                {urgencyOptions.find(u => u.value === filterUrgency)?.label || 'Priority'}
+              </Text>
+              <Text style={styles.filterDropdownArrow}>▼</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+
+        {/* Active Filters */}
+        {renderFilterChips()}
+
         {/* Content */}
         <View style={styles.content}>
-          {/* Filter Tabs - Moved to top for easy access */}
-          <View style={styles.filterSection}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterContainer}
-            >
-              {filters.map((filter) => (
-                <Pressable
-                  key={filter.key}
-                  style={[
-                    styles.filterTab,
-                    activeFilter === filter.key && styles.filterTabActive
-                  ]}
-                  onPress={() => setActiveFilter(filter.key)}
-                >
-                  <Text style={styles.filterEmoji}>{filter.emoji}</Text>
-                  <Text style={[
-                    styles.filterText,
-                    activeFilter === filter.key && styles.filterTextActive
-                  ]}>
-                    {filter.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Location Selection - Simplified */}
+          {/* Location Selection - Back to original style */}
           {boards.length > 0 && (
             <View style={styles.locationSection}>
               <Text style={styles.sectionLabel}>Browse by area:</Text>
@@ -493,31 +696,48 @@ const CommunityHome = () => {
                 <Pressable
                   style={[
                     styles.locationChip,
-                    !selectedLocation && styles.locationChipSelected
+                    !filterArea && styles.locationChipSelected
                   ]}
-                  onPress={() => setSelectedLocation('')}
+                  onPress={() => setFilterArea('')}
                 >
                   <Text style={[
                     styles.locationChipText,
-                    !selectedLocation && styles.locationChipTextSelected
+                    !filterArea && styles.locationChipTextSelected
                   ]}>
                     All Areas
                   </Text>
                 </Pressable>
+                
+                {/* My Area - Hardcoded to Dhanmondi */}
+                <Pressable
+                  style={[
+                    styles.locationChip,
+                    filterArea === 'Dhanmondi' && styles.locationChipSelected
+                  ]}
+                  onPress={() => setFilterArea('Dhanmondi')}
+                >
+                  <Text style={[
+                    styles.locationChipText,
+                    filterArea === 'Dhanmondi' && styles.locationChipTextSelected
+                  ]}>
+                    My Area (Dhanmondi)
+                  </Text>
+                </Pressable>
+                
                 {boards.map((board) => (
                   <Pressable
                     key={board._id}
                     style={[
                       styles.locationChip,
-                      selectedLocation === board.title && styles.locationChipSelected
+                      filterArea === board.title && styles.locationChipSelected
                     ]}
-                    onPress={() => setSelectedLocation(board.title)}
+                    onPress={() => setFilterArea(board.title)}
                   >
                     <Text style={[
                       styles.locationChipText,
-                      selectedLocation === board.title && styles.locationChipTextSelected
+                      filterArea === board.title && styles.locationChipTextSelected
                     ]}>
-                      📍 {board.title}
+                      {board.title}
                       {board.posts > 0 && (
                         <Text style={styles.postCount}> ({board.posts})</Text>
                       )}
@@ -530,9 +750,9 @@ const CommunityHome = () => {
 
           {/* Posts List */}
           <View style={styles.postsSection}>
-            {getFilteredDiscussions().length > 0 ? (
+            {filteredDiscussions.length > 0 ? (
               <FlatList
-                data={getFilteredDiscussions()}
+                data={filteredDiscussions}
                 keyExtractor={(item) => item._id}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.postsList}
@@ -547,6 +767,19 @@ const CommunityHome = () => {
                         {renderPostTypeIndicator(discussion)}
                         {discussion.location && (
                           <Text style={styles.locationTag}>📍 {discussion.location}</Text>
+                        )}
+                        {discussion.priority && discussion.priority !== 'normal' && (
+                          <View style={[
+                            styles.priorityBadge,
+                            { backgroundColor: urgencyOptions.find(u => u.value === discussion.priority)?.color + '20' }
+                          ]}>
+                            <Text style={[
+                              styles.priorityText,
+                              { color: urgencyOptions.find(u => u.value === discussion.priority)?.color }
+                            ]}>
+                              {urgencyOptions.find(u => u.value === discussion.priority)?.icon}
+                            </Text>
+                          </View>
                         )}
                       </View>
                       <Text style={styles.timeText}>{formatTimeAgo(discussion.createdAt)}</Text>
@@ -578,9 +811,17 @@ const CommunityHome = () => {
                     <View style={styles.postFooter}>
                       <View style={styles.postMeta}>
                         <Text style={styles.authorText}>By {discussion.author || 'Anonymous'}</Text>
-                        <Text style={styles.commentsText}>
-                          💬 {discussion.comments?.length || 0} replies
-                        </Text>
+                        <View style={styles.engagementStats}>
+                          <Text style={styles.statsText}>
+                            ❤️ {discussion.likes?.length || 0}
+                          </Text>
+                          <Text style={styles.statsText}>
+                            💬 {discussion.comments?.length || 0}
+                          </Text>
+                          <Text style={styles.popularityScore}>
+                            🔥 {Math.round(calculatePopularityScore(discussion))}
+                          </Text>
+                        </View>
                       </View>
                       
                       <View style={styles.actionButtons}>
@@ -632,7 +873,7 @@ const CommunityHome = () => {
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyEmoji}>💭</Text>
                     <Text style={styles.emptyTitle}>No posts found</Text>
-                    <Text style={styles.emptySubtitle}>Try changing your filters or be the first to post!</Text>
+                    <Text style={styles.emptySubtitle}>Try adjusting your filters or be the first to post!</Text>
                   </View>
                 }
               />
@@ -653,6 +894,34 @@ const CommunityHome = () => {
         >
           <Text style={styles.createButtonText}>+ Create Post</Text>
         </Pressable>
+
+        {/* Dropdown Modals */}
+        {renderDropdownModal(
+          showSortModal,
+          () => setShowSortModal(false),
+          sortOptions,
+          sortBy,
+          setSortBy,
+          'Sort Posts By'
+        )}
+
+        {renderDropdownModal(
+          showCategoryModal,
+          () => setShowCategoryModal(false),
+          categoryOptions,
+          filterCategory,
+          setFilterCategory,
+          'Filter by Category'
+        )}
+
+        {renderDropdownModal(
+          showUrgencyModal,
+          () => setShowUrgencyModal(false),
+          urgencyOptions,
+          filterUrgency,
+          setFilterUrgency,
+          'Filter by Priority'
+        )}
       </SafeAreaView>
     </UserProtectedRoute>
   );
@@ -700,7 +969,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // Header - Simplified
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -731,6 +1000,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1e293b',
   },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
   settingsButton: {
     width: 40,
     height: 40,
@@ -743,13 +1017,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // Content Layout
-  content: {
-    flex: 1,
-  },
-
-  // Filters - Moved to top
-  filterSection: {
+  // Enhanced Filter Bar
+  filterBar: {
     backgroundColor: '#fff',
     paddingVertical: 12,
     borderBottomWidth: 1,
@@ -757,77 +1026,156 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     paddingHorizontal: 20,
+    gap: 12,
   },
-  filterTab: {
+  filterDropdown: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f8fafc',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    marginRight: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    minWidth: 100,
   },
-  filterTabActive: {
-    backgroundColor: '#6366f1',
+  filterDropdownActive: {
+    backgroundColor: '#eef2ff',
     borderColor: '#6366f1',
   },
-  filterEmoji: {
+  filterDropdownEmoji: {
     fontSize: 14,
     marginRight: 6,
   },
-  filterText: {
+  filterDropdownText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#64748b',
+    flex: 1,
   },
-  filterTextActive: {
-    color: '#fff',
+  filterDropdownArrow: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginLeft: 4,
   },
 
-  // Location Selection - Simplified
-  locationSection: {
+  // Active Filters
+  activeFiltersSection: {
     backgroundColor: '#fff',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
-  sectionLabel: {
-    fontSize: 14,
+  activeFiltersLabel: {
+    fontSize: 12,
     color: '#64748b',
     marginBottom: 8,
     fontWeight: '500',
   },
-  locationContainer: {
+  activeFiltersContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  locationChip: {
-    backgroundColor: '#f8fafc',
+  activeFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6366f1',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
     marginRight: 8,
   },
-  locationChipSelected: {
-    backgroundColor: '#eef2ff',
-    borderColor: '#6366f1',
-  },
-  locationChipText: {
-    fontSize: 13,
-    color: '#64748b',
+  activeFilterText: {
+    fontSize: 12,
+    color: '#fff',
     fontWeight: '500',
+    marginRight: 6,
   },
-  locationChipTextSelected: {
+  removeFilterButton: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeFilterText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  clearAllFiltersButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#ef4444',
+  },
+  clearAllFiltersText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '600',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1e293b',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalOptions: {
+    maxHeight: 300,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  modalOptionSelected: {
+    backgroundColor: '#eef2ff',
+  },
+  modalOptionEmoji: {
+    fontSize: 16,
+    marginRight: 12,
+    width: 20,
+  },
+  modalOptionText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1e293b',
+  },
+  modalOptionTextSelected: {
     color: '#6366f1',
     fontWeight: '600',
   },
-  postCount: {
-    color: '#94a3b8',
-    fontSize: 12,
+  modalOptionCheck: {
+    fontSize: 16,
+    color: '#6366f1',
+    fontWeight: 'bold',
+  },
+
+  // Content Layout
+  content: {
+    flex: 1,
   },
 
   // Posts Section
@@ -840,7 +1188,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
 
-  // Post Cards - Cleaner design
+  // Post Cards
   postCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -883,6 +1231,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
+  },
+  priorityBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  priorityText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   timeText: {
     fontSize: 12,
@@ -937,11 +1294,21 @@ const styles = StyleSheet.create({
   authorText: {
     fontSize: 13,
     color: '#64748b',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  commentsText: {
+  engagementStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statsText: {
     fontSize: 12,
     color: '#94a3b8',
+  },
+  popularityScore: {
+    fontSize: 12,
+    color: '#f59e0b',
+    fontWeight: '600',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -1006,7 +1373,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Create Button - Better positioned
+  // Create Button
   createButton: {
     position: 'absolute',
     bottom: 20,
@@ -1027,5 +1394,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+    locationSection: {
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  sectionLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  locationContainer: {
+    gap: 8,
+  },
+  locationChip: {
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginRight: 8,
+  },
+  locationChipSelected: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  locationChipText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  locationChipTextSelected: {
+    color: '#6366f1',
+    fontWeight: '600',
+  },
+  postCount: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
 });
+
 export default CommunityHome;
+  

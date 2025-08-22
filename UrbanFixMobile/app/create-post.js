@@ -449,7 +449,7 @@ export default function CreatePost() {
         description: description.trim(),
         type,
         priority,
-        author: user ? `${user.fname} ${user.lname}` : 'Anonymous',
+        author: user ? user.phone : 'Anonymous',
         location,
         ...(uploadedMediaUrl && mediaType === 'image' && { image: uploadedMediaUrl }),
         ...(uploadedMediaUrl && mediaType === 'video' && { video: uploadedMediaUrl }),
@@ -497,7 +497,7 @@ export default function CreatePost() {
       }
 
       Alert.alert('Success', 'Post created successfully!', [
-        { text: 'OK', onPress: () => router.push('/community') }
+        { text: 'OK', onPress: () => router.replace('/community') }
       ]);
     } catch (e) {
       console.error('Error posting:', e);
