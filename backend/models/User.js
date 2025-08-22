@@ -5,24 +5,29 @@ const userSchema = new mongoose.Schema({
   // ----------------------------
   // Basic Identity
   // ----------------------------
-  fname: { type: String, required: true },
-  lname: { type: String, required: true },
-  phone: { type: String, required: true, unique: true },
-  email: { type: String, required: true, unique: true },
-  username: { type: String, required: true, unique: true },
+  fname: { type: String, required: true, trim: true },
+  lname: { type: String, required: true, trim: true },
+  phone: { type: String, required: true, unique: true, trim: true },
+  email: { type: String, required: true, unique: true, trim: true, lowercase: true },
+  username: { type: String, required: true, unique: true, trim: true },
   password: { type: String, required: true }, // hash this before saving
 
   // ----------------------------
   // Location
   // ----------------------------
-  address: { type: String, required: true },
+  address: { type: String, required: true, trim: true },
+  location: {
+    type: String,
+    trim: true,
+    default: 'Dhanmondi' // Default to Dhanmondi as mentioned in your UI
+  },
 
   // ----------------------------
   // Demographics
   // ----------------------------
   dob: { type: Date, required: true },
-  gender: { type: String, required: true },
-  occupation: { type: String, required: true },
+  gender: { type: String, required: true, trim: true },
+  occupation: { type: String, required: true, trim: true },
   skills: { type: String },
   languages: { type: [String], default: ['English (US)'] },
 
@@ -33,7 +38,7 @@ const userSchema = new mongoose.Schema({
   emergencyPhone: { type: String },
   bloodGroup: { type: String, required: true },
   medicalConditions: { type: String },
-  nid: { type: String },
+  nid: { type: String, trim: true },
 
   // ----------------------------
   // Profile & Engagement
@@ -56,54 +61,10 @@ const userSchema = new mongoose.Schema({
   },
 
   // ----------------------------
-  // Timestamps
+  // Additional Fields
   // ----------------------------
-}, { timestamps: true });
-  lname: { 
-    type: String, 
-    required: true, 
-    trim: true 
-  },
-  phone: { 
-    type: String, 
-    required: true, 
-    unique: true,
-    trim: true 
-  },
-  email: { 
-    type: String, 
-    trim: true,
-    lowercase: true
-  },
-  address: { 
-    type: String, 
-    trim: true 
-  },
-  profession: { 
-    type: String, 
-    trim: true 
-  },
-  gender: { 
-    type: String, 
-    trim: true 
-  },
-  location: {
-    type: String,
-    trim: true,
-    default: 'Dhanmondi' // Default to Dhanmondi as mentioned in your UI
-  },
-  nid: { 
-    type: String, 
-    trim: true 
-  },
-  verificationBadge: { 
-    type: Boolean, 
-    default: false 
-  },
-  isActive: { 
-    type: Boolean, 
-    default: true 
-  },
+  verificationBadge: { type: Boolean, default: false },
+  isActive: { type: Boolean, default: true },
   points: {
     total: { type: Number, default: 0 },
     weekly: { type: Number, default: 0 },
@@ -120,12 +81,11 @@ const userSchema = new mongoose.Schema({
     volunteered: { type: Number, default: 0 },
     pollsVoted: { type: Number, default: 0 }
   }
-}, {
-  timestamps: true
-});
+
+}, { timestamps: true });
 
 // Indexes for efficient lookups
-UserSchema.index({ phone: 1 });
-UserSchema.index({ location: 1 });
+userSchema.index({ phone: 1 });
+userSchema.index({ location: 1 });
 
 module.exports = mongoose.model('User', userSchema);
