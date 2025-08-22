@@ -28,6 +28,9 @@ const emergencyReportRoutes = require('./routes/emergency-reports');
 const emergencyContactRoutes = require('./routes/emergency-contacts');
 const announcementRoutes = require('./routes/announcements');
 
+const transporter = require('./config/email'); // for email verification
+
+
 // ===== Use Routes =====
 app.use('/api/boards', boardRoutes);
 app.use('/api/discussions', discussionRoutes);
