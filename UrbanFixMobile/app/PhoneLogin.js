@@ -10,7 +10,7 @@ export default function PhoneLogin() {
   const { login } = useContext(AuthContext);
   const router = useRouter();
 
-  const [phone, setPhone] = useState('');
+  const [identifier, setIdentifier] = useState(''); // can be phone or email
   const [otp, setOtp] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [error, setError] = useState('');
@@ -36,25 +36,28 @@ export default function PhoneLogin() {
   }, []);
 
   const handleSendOtp = async () => {
-    if (!phone) {
-      setError('Please enter a valid phone number.');
+    if (!identifier) {
+      setError('Please enter a valid phone number or email.');
       return;
     }
     setError('');
 
+    // Determine if input is email or phone
+    const isEmail = identifier.includes('@');
+
     try {
-      const res = await fetch(apiUrl('/api/check-phone'), {
+      const res = await fetch(apiUrl('/api/login-request'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify(isEmail ? { email: identifier } : { phone: identifier }),
       });
       const data = await res.json();
 
       if (!data.success) {
-        setError(data.message || 'Phone number not registered.');
+        setError(data.message || 'Identifier not registered.');
       } else {
         setShowOtpInput(true);
-        Alert.alert('OTP Sent', 'Please check your SMS for the OTP.');
+        Alert.alert('OTP Sent', `Please check your ${isEmail ? 'email' : 'SMS'} for the OTP.`);
       }
     } catch (err) {
       console.error('Error sending OTP:', err);
@@ -67,57 +70,34 @@ export default function PhoneLogin() {
       setError('Please enter a valid 5-digit OTP.');
       return;
     }
-
     setError('');
 
+    const isEmail = identifier.includes('@');
+
     try {
-      const res = await fetch(apiUrl('/api/verify-otp'), {
+      const res = await fetch(apiUrl('/api/login-verify'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify(isEmail ? { email: identifier, otp } : { phone: identifier, otp }),
       });
 
       const data = await res.json();
 
-      if (!res.ok) {
-        setError(data.message || `Server error: ${res.status}`);
+      if (!res.ok || !data.success || !data.user || !data.user._id) {
+        setError(data.message || 'Invalid response from server.');
         return;
       }
 
-      if (!data.success || !data.user || !data.user._id) {
-        setError('Invalid response from server.');
-        return;
-      }
-
-      console.log('✅ OTP verified successfully for:', phone);
+      console.log('✅ OTP verified successfully for:', identifier);
       console.log('📄 User data received:', data.user);
 
-      // ✅ Save user in context with session management and navigate
-      try {
-        const loginSuccess = await login(data.user);
-        if (loginSuccess) {
-          console.log('✅ User session stored successfully');
-          
-          // Show success alert and navigate to user dashboard
-          Alert.alert(
-            'Login Successful! 🎉',
-            'Welcome to UrbanFix. Taking you to your dashboard...',
-            [
-              {
-                text: 'Continue',
-                onPress: () => {
-                  console.log('🚀 Navigating to user dashboard...');
-                  // Navigate to user-homepage explicitly
-                  router.replace('/user-homepage');
-                }
-              }
-            ]
-          );
-        }
-      } catch (loginError) {
-        console.error('❌ Failed to store user session:', loginError);
-        setError('Failed to save login session. Please try again.');
-        return;
+      const loginSuccess = await login(data.user);
+      if (loginSuccess) {
+        Alert.alert(
+          'Login Successful! 🎉',
+          'Welcome to UrbanFix. Taking you to your dashboard...',
+          [{ text: 'Continue', onPress: () => router.replace('/user-homepage') }]
+        );
       }
     } catch (err) {
       console.error('Login failed:', err);
@@ -139,15 +119,16 @@ export default function PhoneLogin() {
 
       <Animated.View style={{ width: '100%', opacity: inputOpacity }}>
         <TextInput
-          placeholder="Phone Number"
+          placeholder="Phone or Email"
           style={styles.input}
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
+          keyboardType="email-address"
+          value={identifier}
+          onChangeText={setIdentifier}
+          autoCapitalize="none"
         />
         {showOtpInput && (
           <TextInput
-            placeholder="OTP from SMS"
+            placeholder="OTP"
             style={styles.input}
             keyboardType="numeric"
             value={otp}
@@ -172,7 +153,7 @@ export default function PhoneLogin() {
       </Animated.View>
 
       <Animated.View style={{ opacity: bottomTextOpacity, marginTop: 30 }}>
-        <TouchableOpacity onPress={() => navigation.navigate('AccountCreation')}>
+        <TouchableOpacity onPress={() => router.push('/AccountCreation')}>
           <Text style={styles.bottomText}>Don't have an account? Create an account</Text>
         </TouchableOpacity>
       </Animated.View>
