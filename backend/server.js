@@ -16,6 +16,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -29,8 +30,9 @@ const uploadRouter = require('./routes/upload');
 const emergencyReportRoutes = require('./routes/emergency-reports');
 const emergencyContactRoutes = require('./routes/emergency-contacts');
 const announcementRoutes = require('./routes/announcements');
-
-const transporter = require('./config/email'); // for email verification
+const accountRoutes = require('./routes/AccountCreate');
+const phoneAuthRoutes = require('./routes/loginAuth');
+const userInfoRoutes = require('./routes/UserInfo');
 
 
 // ===== Use Routes =====
@@ -42,6 +44,9 @@ app.use('/api/emergency-reports', emergencyReportRoutes);
 app.use('/api/emergency-contacts', emergencyContactRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/upload', uploadRouter);
+app.use('/api/account', accountRoutes);
+app.use('/api', phoneAuthRoutes);
+app.use('/api/user', userInfoRoutes);
 
 // ===== Health check endpoint =====
 app.get('/health', (req, res) => {
@@ -113,12 +118,5 @@ mongoose.connect(
   });
 })
 .catch(err => console.error('MongoDB connection error:', err));
-
-// Routes - moved to the correct position
-const phoneAuthRoutes = require('./routes/PhoneAuth');
-const userInfoRoutes = require('./routes/UserInfo');
-
-app.use('/api', phoneAuthRoutes);
-app.use('/api/user', userInfoRoutes);
 
 module.exports = app;
