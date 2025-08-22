@@ -1,14 +1,22 @@
-// backend/config/email.js
-const nodemailer = require('nodemailer');
+const nodemailer = require("nodemailer");
+require("dotenv").config();
 
 const transporter = nodemailer.createTransport({
-  host: process.env.BREVO_SMTP_HOST || 'smtp-relay.brevo.com',
-  port: Number(process.env.BREVO_SMTP_PORT) || 587,
-  secure: false, // true if you use 465
+  host: process.env.BREVO_SMTP_HOST,
+  port: parseInt(process.env.BREVO_SMTP_PORT, 10),
+  secure: false, // TLS (must be false for port 587)
   auth: {
-    user: process.env.BREVO_SMTP_USER || 'apikey', // literally "apikey"
-    pass: process.env.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,              // your Brevo API key
+    user: process.env.BREVO_SMTP_USER,  // SMTP login email
+    pass: process.env.BREVO_SMTP_PASS,  // SMTP key/password
   },
+});
+
+transporter.verify(function (error, success) {
+  if (error) {
+    console.error("[email.js] SMTP verification failed:", error);
+  } else {
+    console.log("[email.js] SMTP server is ready to send messages");
+  }
 });
 
 module.exports = transporter;
