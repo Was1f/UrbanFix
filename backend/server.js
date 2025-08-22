@@ -1,4 +1,4 @@
-// server.js
+// server.js - Updated configuration
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -12,6 +12,8 @@ const app = express();
 
 // ===== Middleware =====
 app.use(cors());
+
+// Increase payload size limits for media uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -27,6 +29,8 @@ const uploadRouter = require('./routes/upload');
 const emergencyReportRoutes = require('./routes/emergency-reports');
 const emergencyContactRoutes = require('./routes/emergency-contacts');
 const announcementRoutes = require('./routes/announcements');
+const phoneAuthRoutes = require('./routes/PhoneAuth');
+const userInfoRoutes = require('./routes/UserInfo');
 
 // ===== Use Routes =====
 app.use('/api/boards', boardRoutes);
@@ -37,6 +41,9 @@ app.use('/api/emergency-reports', emergencyReportRoutes);
 app.use('/api/emergency-contacts', emergencyContactRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/upload', uploadRouter);
+app.use('/api/leaderboard', require('./routes/leaderboard'));
+app.use('/api', phoneAuthRoutes);
+app.use('/api/user', userInfoRoutes);
 
 // ===== Health check endpoint =====
 app.get('/health', (req, res) => {
@@ -58,7 +65,8 @@ app.get('/community', (req, res) => {
       '/api/emergency-contacts',
       '/api/announcements',
       '/api/admin',
-      '/api/moderation'
+      '/api/moderation',
+      '/api/upload'
     ]
   });
 });
@@ -66,6 +74,16 @@ app.get('/community', (req, res) => {
 // ===== Error Handling Middleware =====
 app.use((err, req, res, next) => {
   console.error(err.stack);
+  
+  // Handle specific error types
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({
+      success: false,
+      message: 'File too large. Maximum size is 50MB.',
+      error: 'PAYLOAD_TOO_LARGE'
+    });
+  }
+  
   res.status(500).json({
     success: false,
     message: 'Something went wrong!',
@@ -87,7 +105,6 @@ function getLocalExternalIPv4() {
 }
 
 // ===== MongoDB Connection =====
-
 const PORT = process.env.PORT || 5000;
 
 mongoose.connect(
@@ -105,15 +122,9 @@ mongoose.connect(
     if (lanIp) {
       console.log(`  - Network: http://${lanIp}:${PORT}`);
     }
+    console.log(`  - Uploads directory: ${path.join(__dirname, 'uploads')}`);
   });
 })
 .catch(err => console.error('MongoDB connection error:', err));
-
-// Routes - moved to the correct position
-const phoneAuthRoutes = require('./routes/PhoneAuth');
-const userInfoRoutes = require('./routes/UserInfo');
-
-app.use('/api', phoneAuthRoutes);
-app.use('/api/user', userInfoRoutes);
 
 module.exports = app;

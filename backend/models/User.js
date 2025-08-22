@@ -45,7 +45,25 @@ const UserSchema = new mongoose.Schema({
   isActive: { 
     type: Boolean, 
     default: true 
+  },
+  // Add after your existing fields, before timestamps
+  points: {
+    total: { type: Number, default: 0 },
+    weekly: { type: Number, default: 0 },
+    monthly: { type: Number, default: 0 },
+    daily: { type: Number, default: 0 }
+  },
+  stats: {
+    postsCreated: { type: Number, default: 0 },
+    commentsAdded: { type: Number, default: 0 },
+    helpOffered: { type: Number, default: 0 },
+    likesGiven: { type: Number, default: 0 },
+    eventsAttended: { type: Number, default: 0 },
+    donationsMade: { type: Number, default: 0 },
+    volunteered: { type: Number, default: 0 },
+    pollsVoted: { type: Number, default: 0 }
   }
+
 }, {
   timestamps: true
 });

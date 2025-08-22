@@ -1,4 +1,4 @@
-import React, { useState,useContext } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -15,19 +15,25 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
+import * as DocumentPicker from 'expo-document-picker';
 import { apiUrl } from '../constants/api';
 import { AuthContext } from '../context/AuthContext';
 
 export default function CreatePost() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
+  
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('Report');
   const [location, setLocation] = useState('');
   const [priority, setPriority] = useState('normal');
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedMedia, setSelectedMedia] = useState(null);
+  const [mediaType, setMediaType] = useState(null); // 'image', 'video', 'audio'
   const [isUploading, setIsUploading] = useState(false);
+  const [recording, setRecording] = useState();
+  const [isRecording, setIsRecording] = useState(false);
 
   // Poll
   const [pollOptions, setPollOptions] = useState(['', '']);
@@ -68,33 +74,223 @@ export default function CreatePost() {
     { value: 'urgent', label: 'Urgent', color: '#ef4444', description: 'Immediate action needed' },
   ];
 
-  const handleImagePicker = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setSelectedImage(result.assets[0]);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+  // Helper function to get proper MIME type
+  const getMimeType = (uri, mediaType) => {
+    const extension = uri.split('.').pop().toLowerCase();
+    
+    switch (mediaType) {
+      case 'image':
+        switch (extension) {
+          case 'jpg':
+          case 'jpeg':
+            return 'image/jpeg';
+          case 'png':
+            return 'image/png';
+          case 'gif':
+            return 'image/gif';
+          default:
+            return 'image/jpeg';
+        }
+      case 'video':
+        switch (extension) {
+          case 'mp4':
+            return 'video/mp4';
+          case 'mov':
+            return 'video/quicktime';
+          case 'avi':
+            return 'video/x-msvideo';
+          default:
+            return 'video/mp4';
+        }
+      case 'audio':
+        switch (extension) {
+          case 'm4a':
+            return 'audio/mp4';
+          case 'mp3':
+            return 'audio/mpeg';
+          case 'wav':
+            return 'audio/wav';
+          case 'webm':
+            return 'audio/webm';
+          default:
+            return 'audio/mp4';
+        }
+      default:
+        return 'application/octet-stream';
     }
   };
 
-  const handleRemoveImage = () => {
-    setSelectedImage(null);
+  // Helper function to get proper file extension
+  const getFileExtension = (uri, mediaType) => {
+    const extension = uri.split('.').pop().toLowerCase();
+    
+    // If extension exists and is valid, use it
+    const validExtensions = {
+      image: ['jpg', 'jpeg', 'png', 'gif'],
+      video: ['mp4', 'mov', 'avi'],
+      audio: ['m4a', 'mp3', 'wav', 'webm']
+    };
+    
+    if (validExtensions[mediaType]?.includes(extension)) {
+      return extension;
+    }
+    
+    // Default extensions
+    switch (mediaType) {
+      case 'image':
+        return 'jpg';
+      case 'video':
+        return 'mp4';
+      case 'audio':
+        return 'm4a';
+      default:
+        return 'bin';
+    }
+  };
+
+  const handleMediaPicker = async (type) => {
+    try {
+      let result;
+      
+      if (type === 'image') {
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permissionResult.granted === false) {
+          Alert.alert('Permission Required', 'Permission to access media library is required!');
+          return;
+        }
+
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [16, 9],
+          quality: 0.7, // Reduced quality for smaller file size
+        });
+      } else if (type === 'video') {
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permissionResult.granted === false) {
+          Alert.alert('Permission Required', 'Permission to access media library is required!');
+          return;
+        }
+
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+          allowsEditing: true,
+          quality: 0.5, // Lower quality for smaller file size
+          videoMaxDuration: 30, // Reduced duration to 30 seconds
+        });
+      } else if (type === 'audio') {
+        result = await DocumentPicker.getDocumentAsync({
+          type: 'audio/*',
+          copyToCacheDirectory: true,
+        });
+      }
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        
+        // Check file size (10MB limit)
+        if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+          Alert.alert('File Too Large', 'Please select a file smaller than 10MB');
+          return;
+        }
+        
+        setSelectedMedia({
+          ...asset,
+          // Ensure proper file extension and type
+          name: asset.fileName || `${type}_${Date.now()}.${getFileExtension(asset.uri, type)}`,
+          type: getMimeType(asset.uri, type)
+        });
+        setMediaType(type);
+      } else if (result.type === 'success') {
+        // For DocumentPicker (audio)
+        if (result.size && result.size > 10 * 1024 * 1024) {
+          Alert.alert('File Too Large', 'Please select a file smaller than 10MB');
+          return;
+        }
+        
+        setSelectedMedia({
+          ...result,
+          name: result.name || `audio_${Date.now()}.${getFileExtension(result.uri, 'audio')}`,
+          type: getMimeType(result.uri, 'audio')
+        });
+        setMediaType(type);
+      }
+    } catch (error) {
+      console.error('Error picking media:', error);
+      Alert.alert('Error', 'Failed to pick media');
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const permissionResponse = await Audio.requestPermissionsAsync();
+      if (permissionResponse.status !== 'granted') {
+        Alert.alert('Permission Required', 'Permission to access microphone is required!');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync({
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
+          audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          outputFormat: Audio.RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC,
+          audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+      });
+      
+      setRecording(recording);
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Failed to start recording', err);
+      Alert.alert('Error', 'Failed to start recording');
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      setIsRecording(false);
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      });
+      const uri = recording.getURI();
+      
+      setSelectedMedia({
+        uri,
+        name: `recording_${Date.now()}.m4a`,
+        type: 'audio/mp4', // Proper MIME type for .m4a files
+        fileSize: null // We'll let the server handle size validation
+      });
+      setMediaType('audio');
+      setRecording(undefined);
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      Alert.alert('Error', 'Failed to stop recording');
+    }
+  };
+
+  const handleRemoveMedia = () => {
+    setSelectedMedia(null);
+    setMediaType(null);
   };
 
   const addPollOption = () => {
@@ -170,49 +366,69 @@ export default function CreatePost() {
     try {
       setIsUploading(true);
 
-      let uploadedImageUrl = '';
+      let uploadedMediaUrl = '';
 
-      if (selectedImage) {
+      if (selectedMedia) {
         try {
-          // Convert image to base64 following announcement pattern
-          const response = await fetch(selectedImage.uri);
+          console.log('Uploading media:', {
+            name: selectedMedia.name,
+            type: selectedMedia.type,
+            size: selectedMedia.fileSize
+          });
+
+          const response = await fetch(selectedMedia.uri);
           const blob = await response.blob();
           
-          // Convert blob to base64
-          const base64Promise = new Promise((resolve) => {
+          // Check blob size
+          if (blob.size > 10 * 1024 * 1024) {
+            throw new Error('File size exceeds 10MB limit');
+          }
+          
+          const base64Promise = new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
             reader.readAsDataURL(blob);
           });
           
           const base64Data = await base64Promise;
           
-          // Send as FormData with base64 (following announcement pattern)
-          const formDataToSend = new FormData();
-          formDataToSend.append('imageBase64', base64Data);
-          formDataToSend.append('imageFileName', selectedImage.fileName || `post-${Date.now()}.jpg`);
-          
           const url = apiUrl('/api/upload/community');
+          
+          const uploadPayload = {
+            mediaBase64: base64Data,
+            mediaFileName: selectedMedia.name || `media-${Date.now()}.${getFileExtension(selectedMedia.uri, mediaType)}`,
+            mediaType: mediaType
+          };
+
+          console.log('Upload payload size:', JSON.stringify(uploadPayload).length);
           
           const uploadResponse = await fetch(url, {
             method: 'POST',
-            body: formDataToSend,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(uploadPayload),
           });
 
           if (!uploadResponse.ok) {
-            throw new Error('Failed to upload image');
+            const errorText = await uploadResponse.text();
+            console.error('Upload error response:', errorText);
+            throw new Error(`Upload failed: ${uploadResponse.status} - ${errorText}`);
           }
 
           const uploadResult = await uploadResponse.json();
-          uploadedImageUrl = uploadResult.imageUrl;
-        } catch (imageError) {
-          console.error('Image upload failed:', imageError);
+          uploadedMediaUrl = uploadResult.mediaUrl || uploadResult.imageUrl;
           
-          // Ask user if they want to continue without image
-          const continueWithoutImage = await new Promise((resolve) => {
+          console.log('Upload successful:', uploadedMediaUrl);
+          
+        } catch (mediaError) {
+          console.error('Media upload failed:', mediaError);
+          
+          const continueWithoutMedia = await new Promise((resolve) => {
             Alert.alert(
-              'Image Upload Failed',
-              `${imageError.message}\n\nWould you like to continue without the image?`,
+              'Media Upload Failed',
+              `${mediaError.message}\n\nWould you like to continue without the media?`,
               [
                 { text: 'Cancel', onPress: () => resolve(false) },
                 { text: 'Continue', onPress: () => resolve(true) }
@@ -220,11 +436,11 @@ export default function CreatePost() {
             );
           });
           
-          if (!continueWithoutImage) {
+          if (!continueWithoutMedia) {
             return;
           }
           
-          uploadedImageUrl = '';
+          uploadedMediaUrl = '';
         }
       }
 
@@ -235,7 +451,9 @@ export default function CreatePost() {
         priority,
         author: user ? `${user.fname} ${user.lname}` : 'Anonymous',
         location,
-        ...(uploadedImageUrl && { image: uploadedImageUrl }),
+        ...(uploadedMediaUrl && mediaType === 'image' && { image: uploadedMediaUrl }),
+        ...(uploadedMediaUrl && mediaType === 'video' && { video: uploadedMediaUrl }),
+        ...(uploadedMediaUrl && mediaType === 'audio' && { audio: uploadedMediaUrl }),
       };
 
       // Type-specific data
@@ -288,6 +506,89 @@ export default function CreatePost() {
       setIsUploading(false);
     }
   };
+
+  const renderMediaPreview = () => {
+    if (!selectedMedia) return null;
+
+    switch (mediaType) {
+      case 'image':
+        return (
+          <View style={styles.mediaContainer}>
+            <Image source={{ uri: selectedMedia.uri }} style={styles.mediaPreview} />
+            <Text style={styles.mediaInfo}>Image selected</Text>
+          </View>
+        );
+      case 'video':
+        return (
+          <View style={styles.mediaContainer}>
+            <View style={styles.videoPlaceholder}>
+              <Text style={styles.videoPlaceholderIcon}>🎥</Text>
+              <Text style={styles.mediaInfo}>Video selected</Text>
+            </View>
+          </View>
+        );
+      case 'audio':
+        return (
+          <View style={styles.mediaContainer}>
+            <View style={styles.audioPlaceholder}>
+              <Text style={styles.audioPlaceholderIcon}>🎵</Text>
+              <Text style={styles.mediaInfo}>
+                {selectedMedia.name || 'Audio recording'}
+              </Text>
+            </View>
+          </View>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const renderMediaSection = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Add Media (Optional)</Text>
+      
+      {!selectedMedia ? (
+        <>
+          <Text style={styles.inputLabel}>Choose Media Type</Text>
+          <View style={styles.mediaButtonsContainer}>
+            <Pressable style={styles.mediaButton} onPress={() => handleMediaPicker('image')}>
+              <Text style={styles.mediaButtonIcon}>📷</Text>
+              <Text style={styles.mediaButtonText}>Image</Text>
+            </Pressable>
+            
+            <Pressable style={styles.mediaButton} onPress={() => handleMediaPicker('video')}>
+              <Text style={styles.mediaButtonIcon}>🎥</Text>
+              <Text style={styles.mediaButtonText}>Video</Text>
+            </Pressable>
+            
+            <Pressable style={styles.mediaButton} onPress={() => handleMediaPicker('audio')}>
+              <Text style={styles.mediaButtonIcon}>🎵</Text>
+              <Text style={styles.mediaButtonText}>Audio File</Text>
+            </Pressable>
+            
+            <Pressable 
+              style={[styles.mediaButton, isRecording && styles.mediaButtonActive]} 
+              onPress={isRecording ? stopRecording : startRecording}
+            >
+              <Text style={styles.mediaButtonIcon}>{isRecording ? '⏹️' : '🎤'}</Text>
+              <Text style={styles.mediaButtonText}>
+                {isRecording ? 'Stop Recording' : 'Record Audio'}
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      ) : (
+        <View style={styles.mediaPreviewContainer}>
+          <Text style={styles.inputLabel}>Selected Media</Text>
+          {renderMediaPreview()}
+          <Pressable style={styles.removeMediaButton} onPress={handleRemoveMedia}>
+            <Text style={styles.removeMediaIcon}>🗑️</Text>
+            <Text style={styles.removeMediaText}>Remove Media</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
 
   const renderTypeSpecificFields = () => {
     switch (type) {
@@ -549,30 +850,7 @@ export default function CreatePost() {
         {renderTypeSpecificFields()}
 
         {/* Media Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📷 Add Image (Optional)</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Image</Text>
-            {selectedImage ? (
-              <View style={styles.imageContainer}>
-                <Image source={{ uri: selectedImage.uri }} style={styles.selectedImage} />
-                <Pressable
-                  style={styles.removeImageButton}
-                  onPress={handleRemoveImage}
-                >
-                  <Text style={styles.removeImageIcon}>✕</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable style={styles.imagePickerButton} onPress={handleImagePicker}>
-                <Text style={styles.imagePickerIcon}>📷</Text>
-                <Text style={styles.imagePickerText}>Add Image</Text>
-                <Text style={styles.imagePickerSubtext}>Optional: Add an image to your post</Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
+        {renderMediaSection()}
 
         {/* Submit Section */}
         <View style={styles.submitSection}>
@@ -589,7 +867,7 @@ export default function CreatePost() {
               <View style={styles.uploadingContainer}>
                 <ActivityIndicator size="small" color="#fff" />
                 <Text style={[styles.submitButtonText, { marginLeft: 8 }]}>
-                  {selectedImage ? 'Uploading...' : 'Creating...'}
+                  {selectedMedia ? 'Uploading...' : 'Creating...'}
                 </Text>
               </View>
             ) : (
@@ -599,7 +877,7 @@ export default function CreatePost() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>* Required fields</Text>
-            <Text style={styles.footerText}>Supported: JPG, PNG, GIF • Max file size: 10MB</Text>
+            <Text style={styles.footerText}>Supported: JPG, PNG, MP4, M4A • Max file size: 10MB</Text>
           </View>
         </View>
       </ScrollView>
@@ -863,55 +1141,95 @@ const styles = StyleSheet.create({
   },
 
   // Media Section Styles
-  imageContainer: {
-    position: 'relative',
+  mediaButtonsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+  },
+  mediaButton: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#f8fafc',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 80,
+  },
+  mediaButtonActive: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  mediaButtonIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  mediaButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  mediaPreviewContainer: {
+    marginTop: 16,
+  },
+  mediaContainer: {
     borderRadius: 12,
     overflow: 'hidden',
+    marginBottom: 12,
   },
-  selectedImage: {
+  mediaPreview: {
     width: '100%',
     height: 200,
     backgroundColor: '#f3f4f6',
   },
-  removeImageButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#ef4444',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+  videoPlaceholder: {
+    backgroundColor: '#f8fafc',
+    height: 120,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 8,
   },
-  removeImageIcon: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  imagePickerButton: {
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    paddingVertical: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imagePickerIcon: {
+  videoPlaceholderIcon: {
     fontSize: 32,
     marginBottom: 8,
   },
-  imagePickerText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748b',
-    marginBottom: 4,
+  audioPlaceholder: {
+    backgroundColor: '#f8fafc',
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
   },
-  imagePickerSubtext: {
-    fontSize: 12,
-    color: '#94a3b8',
+  audioPlaceholderIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  mediaInfo: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  removeMediaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+    padding: 12,
+    borderRadius: 8,
+  },
+  removeMediaIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  removeMediaText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
 
   // Submit Section
@@ -948,4 +1266,3 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 });
-

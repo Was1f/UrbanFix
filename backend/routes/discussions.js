@@ -2,11 +2,54 @@ const express = require('express');
 const router = express.Router();
 const Discussion = require('../models/Discussion');
 const Board = require('../models/Board');
+const User = require('../models/User');
 const mongoose = require('mongoose');
 
 // Helper function to validate ObjectId
 const isValidObjectId = (id) => {
   return id && mongoose.Types.ObjectId.isValid(id) && id !== 'undefined' && id !== 'null';
+};
+
+// Points awarding function
+const awardPoints = async (phone, action, location) => {
+  const POINTS = {
+    POST_CREATED: 10,
+    COMMENT_ADDED: 3,
+    HELP_OFFERED: 15,
+    POST_LIKED: 1,
+    POLL_VOTED: 5,
+    EVENT_RSVP: 8,
+    DONATION_MADE: 10,
+    VOLUNTEER_SIGNUP: 12
+  };
+  
+  try {
+    const user = await User.findOne({ phone });
+    if (!user || !POINTS[action]) return;
+    
+    const points = POINTS[action];
+    user.points.total += points;
+    user.points.daily += points;
+    user.points.weekly += points;
+    user.points.monthly += points;
+    
+    // Update stats
+    switch(action) {
+      case 'POST_CREATED': user.stats.postsCreated++; break;
+      case 'COMMENT_ADDED': user.stats.commentsAdded++; break;
+      case 'HELP_OFFERED': user.stats.helpOffered++; break;
+      case 'POST_LIKED': user.stats.likesGiven++; break;
+      case 'POLL_VOTED': user.stats.pollsVoted++; break;
+      case 'EVENT_RSVP': user.stats.eventsAttended++; break;
+      case 'DONATION_MADE': user.stats.donationsMade++; break;
+      case 'VOLUNTEER_SIGNUP': user.stats.volunteered++; break;
+    }
+    
+    await user.save();
+    console.log(`Awarded ${points} points to ${phone} for ${action}`);
+  } catch (error) {
+    console.error('Error awarding points:', error);
+  }
 };
 
 // Get all discussions or filter by location
@@ -122,6 +165,11 @@ router.post('/', async (req, res) => {
     const newDiscussion = new Discussion(discussionData);
     const saved = await newDiscussion.save();
     
+    // AWARD POINTS FOR CREATING POST
+    if (author && author !== "Anonymous") {
+      await awardPoints(author, 'POST_CREATED', location);
+    }
+    
     // Update board post count
     let board = await Board.findOne({ title: location });
     if (board) {
@@ -170,8 +218,13 @@ router.post('/:id/like', async (req, res) => {
       // User already liked, so unlike
       discussion.likes.splice(userIndex, 1);
     } else {
-      // User hasn't liked, so add like
+      // User hasn't liked, so add like and award points
       discussion.likes.push(username);
+      
+      // AWARD POINTS FOR LIKING
+      if (username !== 'Anonymous') {
+        await awardPoints(username, 'POST_LIKED', discussion.location);
+      }
     }
     
     discussion.likeCount = discussion.likes.length;
@@ -205,6 +258,9 @@ router.post('/:id/vote', async (req, res) => {
       return res.status(400).json({ message: 'Invalid poll option' });
     }
 
+    // Check if user already voted to avoid double points
+    const hasVotedBefore = discussion.userVotes.has(username);
+
     // Remove previous vote if exists
     if (previousVote && discussion.pollOptions.includes(previousVote)) {
       const prevCount = discussion.pollVotes.get(previousVote) || 0;
@@ -217,6 +273,12 @@ router.post('/:id/vote', async (req, res) => {
     discussion.userVotes.set(username, option);
 
     await discussion.save();
+
+    // AWARD POINTS FOR VOTING (only if first time voting)
+    if (!hasVotedBefore && username !== 'Anonymous') {
+      await awardPoints(username, 'POLL_VOTED', discussion.location);
+    }
+
     res.json(discussion);
   } catch (error) {
     console.error('Error voting:', error);
@@ -241,19 +303,30 @@ router.post('/:id/rsvp', async (req, res) => {
       return res.status(404).json({ message: 'Event or volunteer opportunity not found' });
     }
 
+    let alreadySignedUp = false;
+
     if (discussion.type === 'Event') {
-      if (!discussion.attendees.includes(username)) {
+      alreadySignedUp = discussion.attendees.includes(username);
+      if (!alreadySignedUp) {
         discussion.attendees.push(username);
         discussion.attendeeCount = discussion.attendees.length;
       }
     } else if (discussion.type === 'Volunteer') {
-      if (!discussion.volunteers.includes(username)) {
+      alreadySignedUp = discussion.volunteers.includes(username);
+      if (!alreadySignedUp) {
         discussion.volunteers.push(username);
         discussion.volunteerCount = discussion.volunteers.length;
       }
     }
 
     await discussion.save();
+
+    // AWARD POINTS FOR RSVP (only if not already signed up)
+    if (!alreadySignedUp && username !== 'Anonymous') {
+      const action = discussion.type === 'Event' ? 'EVENT_RSVP' : 'VOLUNTEER_SIGNUP';
+      await awardPoints(username, action, discussion.location);
+    }
+
     res.json(discussion);
   } catch (error) {
     console.error('Error with RSVP:', error);
@@ -324,6 +397,12 @@ router.post('/:id/donate', async (req, res) => {
     discussion.currentAmount = (discussion.currentAmount || 0) + parseFloat(amount);
     
     await discussion.save();
+
+    // AWARD POINTS FOR DONATION
+    if (username !== 'Anonymous') {
+      await awardPoints(username, 'DONATION_MADE', discussion.location);
+    }
+    
     res.json(discussion);
   } catch (error) {
     console.error('Error processing donation:', error);
@@ -363,8 +442,10 @@ router.post('/:id/offer-help', async (req, res) => {
     discussion.helperCount = discussion.helpers.length;
     await discussion.save();
 
-    // TODO: Add notification logic here
-    // await createNotification(discussion.author, `${username} offered to help with your report: ${discussion.title}`);
+    // AWARD POINTS FOR OFFERING HELP
+    if (username !== 'Anonymous') {
+      await awardPoints(username, 'HELP_OFFERED', discussion.location);
+    }
 
     res.json(discussion);
   } catch (error) {
@@ -502,6 +583,11 @@ router.post('/:id/comments', async (req, res) => {
 
     discussion.comments.push(newComment);
     await discussion.save();
+
+    // AWARD POINTS FOR COMMENTING
+    if (author !== 'Anonymous') {
+      await awardPoints(author, 'COMMENT_ADDED', discussion.location);
+    }
 
     // Return the newly added comment
     const addedComment = discussion.comments[discussion.comments.length - 1];

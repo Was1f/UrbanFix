@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Audio } from 'expo-audio';
+import { Audio } from 'expo-av'; // Fixed import
 import { apiUrl } from '../constants/api';
 import { AuthContext } from '../context/AuthContext';
 
@@ -77,6 +77,35 @@ const PostDetail = () => {
     return apiUrl(imagePath);
   };
 
+  // Helper function to construct proper media URLs
+  const getMediaUrl = (mediaPath, mediaType) => {
+    if (!mediaPath) return null;
+    
+    // If it's already a full URL, return as is
+    if (mediaPath.startsWith('http://') || mediaPath.startsWith('https://')) {
+      return mediaPath;
+    }
+    
+    // If it starts with /uploads, construct the full URL
+    if (mediaPath.startsWith('/uploads/')) {
+      return apiUrl(mediaPath);
+    }
+    
+    // If it's just a filename, construct path based on media type
+    if (!mediaPath.startsWith('/')) {
+      if (mediaType === 'audio') {
+        return apiUrl(`/uploads/community/audio/${mediaPath}`);
+      } else if (mediaType === 'video') {
+        return apiUrl(`/uploads/community/video/${mediaPath}`);
+      } else {
+        return apiUrl(`/uploads/community/${mediaPath}`);
+      }
+    }
+    
+    // Default case
+    return apiUrl(mediaPath);
+  };
+
   const fetchPostData = useCallback(async () => {
     try {
       setLoading(true);
@@ -116,6 +145,8 @@ const PostDetail = () => {
 
       console.log('Fetched post data:', postData?._id);
       console.log('Post image URL:', postData?.image);
+      console.log('Post audio URL:', postData?.audio);
+      console.log('Post video URL:', postData?.video);
       console.log('Fetched comments count:', commentsData?.length);
 
       setPost(postData);
@@ -365,6 +396,27 @@ const PostDetail = () => {
     try {
       setAudioError(null);
       
+      // For web platform, use HTML5 audio
+      if (Platform.OS === 'web') {
+        const audioUrl = getMediaUrl(post.audio, 'audio');
+        const audio = new window.Audio(audioUrl);
+        
+        if (isPlaying) {
+          audio.pause();
+          setIsPlaying(false);
+        } else {
+          audio.play();
+          setIsPlaying(true);
+          
+          // Handle when audio finishes
+          audio.addEventListener('ended', () => {
+            setIsPlaying(false);
+          });
+        }
+        return;
+      }
+
+      // For mobile platforms, use expo-av
       if (sound) {
         const status = await sound.getStatusAsync();
         if (status.isLoaded) {
@@ -379,8 +431,11 @@ const PostDetail = () => {
         }
       }
 
+      const audioUrl = getMediaUrl(post.audio, 'audio');
+      console.log('Playing audio from URL:', audioUrl);
+      
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: post.audio },
+        { uri: audioUrl },
         { shouldPlay: true }
       );
       
@@ -445,42 +500,78 @@ const PostDetail = () => {
     );
   };
 
-      const handleDeletePost = () => {
-      Alert.alert(
-        'Delete Post',
-        'Are you sure you want to delete this post? This action cannot be undone.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: confirmDeletePost
-          }
-        ]
-      );
-    };
-
-    const confirmDeletePost = async () => {
-      try {
-        const response = await fetch(apiUrl(`/api/discussions/${postId}`), {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ author: getCurrentUser() })
-        });
-
-        if (response.ok) {
-          Alert.alert('Success', 'Post deleted successfully', [
-            { text: 'OK', onPress: () => router.back() }
-          ]);
-        } else {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Failed to delete post');
+  const handleDeletePost = () => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: confirmDeletePost
         }
-      } catch (error) {
-        console.error('Error deleting post:', error);
-        Alert.alert('Error', error.message || 'Failed to delete post');
+      ]
+    );
+  };
+
+  const confirmDeletePost = async () => {
+    try {
+      const response = await fetch(apiUrl(`/api/discussions/${postId}`), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: getCurrentUser() })
+      });
+
+      if (response.ok) {
+        Alert.alert('Success', 'Post deleted successfully', [
+          { text: 'OK', onPress: () => router.back() }
+        ]);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to delete post');
       }
-    };
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      Alert.alert('Error', error.message || 'Failed to delete post');
+    }
+  };
+
+  const renderMediaContent = () => {
+    // Render image if present
+    if (post.image) {
+      return (
+        <Image 
+          source={{ uri: getImageUrl(post.image) }} 
+          style={styles.postImage}
+          resizeMode="cover"
+          onError={(error) => {
+            console.log('Image load error:', error.nativeEvent.error);
+            console.log('Failed image URL:', getImageUrl(post.image));
+            console.log('Original image path:', post.image);
+          }}
+          onLoad={() => {
+            console.log('Image loaded successfully:', getImageUrl(post.image));
+          }}
+        />
+      );
+    }
+    
+    // Render video placeholder if present
+    if (post.video) {
+      return (
+        <View style={styles.videoContainer}>
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.videoIcon}>🎥</Text>
+            <Text style={styles.videoText}>Video Content</Text>
+            <Text style={styles.videoSubtext}>Tap to view video</Text>
+          </View>
+        </View>
+      );
+    }
+    
+    return null;
+  };
 
   const renderPollSection = () => {
     if (post.type !== 'Poll' || !post.pollOptions) return null;
@@ -685,7 +776,10 @@ const PostDetail = () => {
           ]}
           onPress={handlePlayAudio}
         >
-          <Text style={styles.audioButtonText}>
+          <Text style={[
+            styles.audioButtonText,
+            isPlaying && styles.audioButtonTextPlaying
+          ]}>
             {isPlaying ? '⏸️ Pause' : '▶️ Play Audio'}
           </Text>
         </Pressable>
@@ -777,22 +871,8 @@ const PostDetail = () => {
               <Text style={styles.timeText}>{formatTimeAgo(post.createdAt || post.time)}</Text>
             </View>
 
-            {/* Post Image */}
-            {post.image && (
-              <Image 
-                source={{ uri: getImageUrl(post.image) }} 
-                style={styles.postImage}
-                resizeMode="cover"
-                onError={(error) => {
-                  console.log('Image load error:', error.nativeEvent.error);
-                  console.log('Failed image URL:', getImageUrl(post.image));
-                  console.log('Original image path:', post.image);
-                }}
-                onLoad={() => {
-                  console.log('Image loaded successfully:', getImageUrl(post.image));
-                }}
-              />
-            )}
+            {/* Post Media Content */}
+            {renderMediaContent()}
 
             {/* Post Content */}
             <View style={styles.postContent}>
@@ -931,10 +1011,26 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
-headerTitle: {
+  headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1e293b',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fef2f2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteIcon: {
+    fontSize: 16,
   },
   shareButton: {
     width: 40,
@@ -1054,6 +1150,30 @@ headerTitle: {
     width: '100%',
     height: 200,
   },
+  videoContainer: {
+    width: '100%',
+    height: 200,
+  },
+  videoPlaceholder: {
+    backgroundColor: '#f1f5f9',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  videoText: {
+    fontSize: 16,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  videoSubtext: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 4,
+  },
   postContent: {
     padding: 16,
   },
@@ -1171,6 +1291,9 @@ headerTitle: {
     fontSize: 14,
     color: '#6366f1',
     fontWeight: '600',
+  },
+  audioButtonTextPlaying: {
+    color: '#fff',
   },
   audioError: {
     fontSize: 12,
@@ -1510,22 +1633,6 @@ headerTitle: {
   sendButtonText: {
     fontSize: 18,
   },
-  headerRight: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 8,
-},
-deleteButton: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: '#fef2f2',
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-deleteIcon: {
-  fontSize: 16,
-},
 });
 
 export default PostDetail;
