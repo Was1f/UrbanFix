@@ -100,15 +100,32 @@ app.use((err, req, res, next) => {
 });
 
 // ===== Helper for LAN IP =====
-function getLocalExternalIPv4() {
+function getWirelessNetworkIP() {
   const interfaces = os.networkInterfaces();
+  
+  // Priority order: WiFi/Wireless interfaces first, then other external interfaces
+  const priorityInterfaces = ['Wi-Fi', 'wlan0', 'wlan1', 'wifi', 'wireless'];
+  
+  // First try to find priority wireless interfaces
   for (const interfaceName of Object.keys(interfaces)) {
-    for (const net of interfaces[interfaceName] || []) {
-      if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
-        return net.address;
+    if (priorityInterfaces.some(priority => interfaceName.toLowerCase().includes(priority.toLowerCase()))) {
+      for (const net of interfaces[interfaceName] || []) {
+        if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
+          return { ip: net.address, interface: interfaceName };
+        }
       }
     }
   }
+  
+  // If no priority interfaces found, look for any external IPv4 interface
+  for (const interfaceName of Object.keys(interfaces)) {
+    for (const net of interfaces[interfaceName] || []) {
+      if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
+        return { ip: net.address, interface: interfaceName };
+      }
+    }
+  }
+  
   return null;
 }
 
@@ -123,13 +140,18 @@ mongoose.connect(
   console.log('MongoDB Connected');
 
   app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Server accessible at:`);
-  console.log(`  - Local: http://localhost:${PORT}`);
-  console.log(`  - Network: http://192.168.10.115:${PORT} (WiFi)`);
-  console.log(`  - Network: http://192.168.56.1:${PORT} (Virtual)`);
-  console.log(`  - Uploads directory: ${path.join(__dirname, 'uploads')}`);
-});
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Server accessible at:`);
+    console.log(`  - Local: http://localhost:${PORT}`);
+    
+    // Get actual network interfaces
+    const localIP = getWirelessNetworkIP();
+    if (localIP) {
+      console.log(`  - Network: http://${localIP.ip}:${PORT} (${localIP.interface})`);
+    }
+    
+    console.log(`  - Uploads directory: ${path.join(__dirname, 'uploads')}`);
+  });
 })
 .catch(err => console.error('MongoDB connection error:', err));
 

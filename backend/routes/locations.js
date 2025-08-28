@@ -11,11 +11,8 @@ const dhakaLocations = [
   'Mohammadpur',
   'Mirpur',
   'Uttara',
-
   'Narayanganj',
   'Gazipur',
-
-
   'Motijheel',
   'Ramna',
   'Shahbagh',
@@ -26,7 +23,7 @@ const dhakaLocations = [
   'Motijheel',
   'Ramna',
   'Shahbagh',
-  'Dhanmondi',
+
   'Wari',
 
   'Jatrabari'
