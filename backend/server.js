@@ -36,6 +36,7 @@ const accountRoutes = require('./routes/AccountCreate');
 const phoneAuthRoutes = require('./routes/loginAuth');
 const userInfoRoutes = require('./routes/UserInfo');
 const locationRoutes = require('./routes/locations');
+const tileProxyRoutes = require('./routes/tiles');
 
 
 // ===== Use Routes =====
@@ -52,6 +53,7 @@ app.use('/api/account', accountRoutes);
 app.use('/api', phoneAuthRoutes);
 app.use('/api/user', userInfoRoutes);
 app.use('/api/locations', locationRoutes);
+app.use('/tiles', tileProxyRoutes);
 
 // ===== Health check endpoint =====
 app.get('/health', (req, res) => {

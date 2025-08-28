@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { apiUrl } from '../constants/api';
+import { apiUrl, API_BASE_URL } from '../constants/api';
 import { WebView } from 'react-native-webview';
 
 export default function ReportFire() {
@@ -35,6 +35,20 @@ export default function ReportFire() {
   useEffect(() => {
     requestLocationPermission();
   }, []);
+  // Listen for messages from iframe when running on web
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleMessage = (event) => {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data && data.type === 'move' && data.center) {
+          setMapCenter({ latitude: data.center.latitude, longitude: data.center.longitude });
+        }
+      } catch (_) {}
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [setMapCenter]);
 
   const requestLocationPermission = async () => {
     try {
@@ -186,30 +200,72 @@ export default function ReportFire() {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <style>
           html, body, #map { height: 100%; margin: 0; padding: 0; }
           .leaflet-container { background: #fff; }
+          #placeholder { position: absolute; top: 8px; left: 8px; padding: 4px 8px; background: rgba(0,0,0,0.6); color: #fff; border-radius: 4px; font-family: sans-serif; font-size: 12px; z-index: 9999; }
         </style>
       </head>
       <body>
+        <div id="placeholder">Map loading...</div>
         <div id="map"></div>
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
           (function(){
-            var lat = ${Number.isFinite(latitude) ? latitude : 23.8103};
-            var lng = ${Number.isFinite(longitude) ? longitude : 90.4125};
-            var map = L.map('map', { zoomControl: true, attributionControl: false }).setView([lat, lng], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-            var marker = L.marker([lat, lng]).addTo(map);
-            function postCenter(){
-              var c = map.getCenter();
-              if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'move', center: { latitude: c.lat, longitude: c.lng } }));
+            function postToHost(type, payload){
+              try {
+                var msg = JSON.stringify({ type: type, payload: payload });
+                if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                  window.ReactNativeWebView.postMessage(msg);
+                } else if (window.parent && window.parent.postMessage) {
+                  window.parent.postMessage({ type: type, payload: payload }, '*');
+                }
+              } catch (_) {}
+            }
+            // Bridge console logs and errors back to host
+            (function(){
+              var origLog = console.log, origWarn = console.warn, origError = console.error;
+              console.log = function(){ try { postToHost('log', { level: 'log', args: Array.prototype.slice.call(arguments) }); } catch(_){}; origLog.apply(console, arguments); };
+              console.warn = function(){ try { postToHost('log', { level: 'warn', args: Array.prototype.slice.call(arguments) }); } catch(_){}; origWarn.apply(console, arguments); };
+              console.error = function(){ try { postToHost('log', { level: 'error', args: Array.prototype.slice.call(arguments) }); } catch(_){}; origError.apply(console, arguments); };
+              window.onerror = function(message, source, lineno, colno, error){ postToHost('js_error', { message: String(message), source: source, line: lineno, col: colno }); };
+              window.addEventListener('unhandledrejection', function(e){ postToHost('promise_rejection', { reason: String(e.reason || 'unknown') }); });
+            })();
+            // Quick connectivity probe to OSM tile server
+            (function(){
+              try {
+                var testUrl = 'https://tile.openstreetmap.org/1/1/1.png';
+                fetch(testUrl, { method: 'HEAD' }).then(function(r){ postToHost('tile_probe', { ok: r.ok, status: r.status }); }).catch(function(err){ postToHost('tile_probe', { ok: false, error: String(err) }); });
+              } catch (err) { postToHost('tile_probe', { ok: false, error: String(err) }); }
+            })();
+            function init(){
+              try {
+                var lat = ${Number.isFinite(latitude) ? latitude : 23.8103};
+                var lng = ${Number.isFinite(longitude) ? longitude : 90.4125};
+                var map = L.map('map', { zoomControl: true, attributionControl: false }).setView([lat, lng], 15);
+                var errorTile = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AApEBm0s0YH0AAAAASUVORK5CYII=';
+                var tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, errorTileUrl: errorTile });
+                tiles.on('tileerror', function(e){ try { postToHost('tile_error', { url: (e && e.tile && e.tile.src) || 'unknown' }); } catch(_){} });
+                tiles.on('load', function(){ try { postToHost('tiles_loaded', {}); } catch(_){} });
+                tiles.addTo(map);
+                var marker = L.marker([lat, lng]).addTo(map);
+                var placeholder = document.getElementById('placeholder');
+                if (placeholder) placeholder.remove();
+                function postCenter(){
+                  var c = map.getCenter();
+                  var payload = { type: 'move', center: { latitude: c.lat, longitude: c.lng } };
+                  postToHost('move', payload);
+                }
+                map.on('moveend', postCenter);
+                postToHost('ready', { message: 'Leaflet initialized' });
+                postCenter();
+              } catch (err) {
+                postToHost('error', { message: String(err) });
               }
             }
-            map.on('moveend', postCenter);
-            postCenter();
+            if (document.readyState === 'complete' || document.readyState === 'interactive') { init(); }
+            else { document.addEventListener('DOMContentLoaded', init); }
           })();
         </script>
       </body>
@@ -244,24 +300,81 @@ export default function ReportFire() {
 
         {/* Map View */}
         <View style={styles.mapContainer}>
-          <WebView
-            originWhitelist={["*"]}
-            javaScriptEnabled
-            domStorageEnabled
-            onMessage={(event) => {
-              try {
-                const data = JSON.parse(event.nativeEvent.data);
-                if (data && data.type === 'move' && data.center) {
-                  setMapCenter({ latitude: data.center.latitude, longitude: data.center.longitude });
-                }
-              } catch (e) {}
-            }}
-            source={{ html: getLeafletHtml(
-              userLocation?.coords?.latitude,
-              userLocation?.coords?.longitude
-            ) }}
-            style={{ width: '100%', height: 220, borderRadius: 12, overflow: 'hidden', backgroundColor: '#fff' }}
-          />
+          {Platform.OS === 'web' ? (
+            <View style={{ width: '100%', height: 220, borderRadius: 12, overflow: 'hidden', backgroundColor: '#fff' }}>
+              {(() => {
+                const IFrame = 'iframe';
+                return (
+                  <IFrame
+                    srcDoc={getLeafletHtml(
+                      userLocation?.coords?.latitude,
+                      userLocation?.coords?.longitude
+                    )}
+                    style={{ width: '100%', height: '100%', border: 0 }}
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                );
+              })()}
+            </View>
+          ) : (
+            <WebView
+              originWhitelist={["*"]}
+              javaScriptEnabled
+              domStorageEnabled
+              androidLayerType="hardware"
+              mixedContentMode="always"
+              setSupportMultipleWindows={false}
+              allowFileAccess
+              allowFileAccessFromFileURLs
+              allowUniversalAccessFromFileURLs
+              cacheEnabled
+              incognito={false}
+              thirdPartyCookiesEnabled
+              userAgent="Mozilla/5.0 (Linux; Android 12; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+              onMessage={(event) => {
+                try {
+                  const data = JSON.parse(event.nativeEvent.data);
+                  if (data?.type === 'move' && data?.payload?.center) {
+                    setMapCenter({ latitude: data.payload.center.latitude, longitude: data.payload.center.longitude });
+                  } else if (data?.type === 'ready') {
+                    console.log('Leaflet ready:', data?.payload);
+                  } else if (data?.type === 'tile_probe') {
+                    console.log('Tile probe:', data?.payload);
+                  } else if (data?.type === 'tile_error') {
+                    console.warn('Tile error:', data?.payload);
+                  } else if (data?.type === 'tiles_loaded') {
+                    console.log('Tiles loaded');
+                  } else if (data?.type === 'js_error') {
+                    Alert.alert('Map JS Error', String(data?.payload?.message || 'Unknown'));
+                  } else if (data?.type === 'promise_rejection') {
+                    Alert.alert('Map Promise Rejection', String(data?.payload?.reason || 'Unknown'));
+                  } else if (data?.type === 'error') {
+                    Alert.alert('Map Error', String(data?.payload?.message || 'Unknown'));
+                  } else if (data?.type === 'log') {
+                    const level = data?.payload?.level || 'log';
+                    console[level]('Leaflet(WebView):', ...(data?.payload?.args || []));
+                  }
+                } catch (e) {}
+              }}
+              onError={(e) => {
+                try {
+                  const desc = e?.nativeEvent?.description || 'Unknown error';
+                  Alert.alert('Map Error', desc);
+                } catch (_) {}
+              }}
+              onHttpError={(e) => {
+                try {
+                  const code = e?.nativeEvent?.statusCode;
+                  Alert.alert('Map HTTP Error', String(code));
+                } catch (_) {}
+              }}
+              source={{ html: getLeafletHtml(
+                userLocation?.coords?.latitude,
+                userLocation?.coords?.longitude
+              ), baseUrl: 'https://tile.openstreetmap.org/' }}
+              style={{ width: '100%', height: 220, backgroundColor: '#fff' }}
+            />
+          )}
         </View>
 
         {/* Description Input */}
