@@ -80,6 +80,24 @@ const userSchema = new mongoose.Schema({
     monthly: { type: Number, default: 0 },
     daily: { type: Number, default: 0 }
   },
+
+  pointHistory: [{
+  date: {
+    type: Date,
+    default: Date.now
+  },
+  points: {
+    type: Number,
+    required: true
+  },
+  action: {
+    type: String,
+    required: true
+  },
+  location: String,
+  details: String
+  }],
+
   stats: {
     postsCreated: { type: Number, default: 0 },
     commentsAdded: { type: Number, default: 0 },

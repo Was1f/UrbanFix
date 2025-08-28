@@ -4,6 +4,7 @@ const Announcement = require('../models/Announcement');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const NotificationService = require('../services/notificationService'); // Add this import
 
 // Configure multer for image uploads
 const storage = multer.diskStorage({
@@ -248,7 +249,7 @@ router.post('/admin', authenticateAdmin, upload.single('image'), async (req, res
         fs.writeFileSync(filepath, buffer);
         imagePath = `/uploads/announcements/${filename}`;
       } catch (imageError) {
-        console.error('❌ Failed to process base64 image:', imageError);
+        console.error('Failed to process base64 image:', imageError);
       }
     }
     // Handle regular file upload
@@ -272,6 +273,14 @@ router.post('/admin', authenticateAdmin, upload.single('image'), async (req, res
     
     const populatedAnnouncement = await Announcement.findById(announcement._id)
       .populate('createdBy', 'username email');
+
+    // CREATE NOTIFICATIONS for all users about the new announcement
+    console.log('Creating notifications for new announcement...');
+    await NotificationService.notifyNewAnnouncement(
+      announcement.title,
+      announcement.customType || announcement.type,
+      announcement._id
+    );
 
     res.status(201).json(populatedAnnouncement);
   } catch (error) {
@@ -334,7 +343,7 @@ router.put('/admin/:id', authenticateAdmin, upload.single('image'), async (req, 
         fs.writeFileSync(filepath, buffer);
         announcement.image = `/uploads/announcements/${filename}`;
       } catch (imageError) {
-        console.error('❌ Failed to process base64 image for update:', imageError);
+        console.error('Failed to process base64 image for update:', imageError);
       }
     }
     // Handle regular file upload

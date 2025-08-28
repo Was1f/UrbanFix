@@ -9,6 +9,9 @@ const transporter = nodemailer.createTransport({
     user: process.env.BREVO_SMTP_USER,  // SMTP login email
     pass: process.env.BREVO_SMTP_PASS,  // SMTP key/password
   },
+  tls: {
+    rejectUnauthorized: false // Ignore self-signed certificate errors
+  }
 });
 
 transporter.verify(function (error, success) {

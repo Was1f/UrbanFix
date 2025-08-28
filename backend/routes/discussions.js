@@ -4,13 +4,13 @@ const Discussion = require('../models/Discussion');
 const Board = require('../models/Board');
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const NotificationService = require('../services/notificationService'); // Add this import
 
 // Helper function to validate ObjectId
 const isValidObjectId = (id) => {
   return id && mongoose.Types.ObjectId.isValid(id) && id !== 'undefined' && id !== 'null';
 };
 
-// Points awarding function
 const awardPoints = async (phone, action, location) => {
   const POINTS = {
     POST_CREATED: 10,
@@ -28,10 +28,33 @@ const awardPoints = async (phone, action, location) => {
     if (!user || !POINTS[action]) return;
     
     const points = POINTS[action];
+    const now = new Date();
+    
+    // Update total points (always accumulates)
     user.points.total += points;
-    user.points.daily += points;
-    user.points.weekly += points;
-    user.points.monthly += points;
+    
+    // REMOVED: Don't update daily/weekly/monthly here as they should be calculated from history
+    // These fields can be removed or used as cache if needed
+    
+    // Add to point history for proper time-based filtering
+    if (!user.pointHistory) {
+      user.pointHistory = [];
+    }
+    
+    user.pointHistory.push({
+      date: now,
+      points: points,
+      action: action,
+      location: location,
+      details: `${action} in ${location}`
+    });
+    
+    // Optional: Keep only last 365 days of history to prevent database bloat
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    user.pointHistory = user.pointHistory.filter(entry => 
+      new Date(entry.date) >= oneYearAgo
+    );
     
     // Update stats
     switch(action) {
@@ -46,11 +69,12 @@ const awardPoints = async (phone, action, location) => {
     }
     
     await user.save();
-    console.log(`Awarded ${points} points to ${phone} for ${action}`);
+    console.log(`Awarded ${points} points to ${phone} for ${action} at ${now}`);
   } catch (error) {
     console.error('Error awarding points:', error);
   }
 };
+
 
 // Get all discussions or filter by location
 router.get('/', async (req, res) => {
@@ -105,7 +129,22 @@ router.post('/', async (req, res) => {
       // Volunteer fields
       volunteersNeeded, skills
     } = req.body;
-    
+        // Find the user by phone number to get their name
+    let authorName = 'Anonymous';
+    let authorProfilePicture = null; 
+    if (author && author !== 'Anonymous') {
+      try {
+        const user = await User.findOne({ phone: author });
+        if (user) {
+          authorName = `${user.username}`.trim();
+          authorProfilePicture = user.profilePic;
+        }
+      } catch (userError) {
+        console.error('Error finding user for author name:', userError);
+        authorName = 'Anonymous';
+      }
+    }
+
     if (!title || !type || !location) {
       return res.status(400).json({ 
         message: 'Title, type, and location are required' 
@@ -116,7 +155,9 @@ router.post('/', async (req, res) => {
       title,
       description,
       type,
-      author: author || "Anonymous",
+      author: authorName || "Anonymous",
+      authorPhone: author,
+      authorProfilePicture,
       location,
       image,
       audio,
@@ -225,6 +266,17 @@ router.post('/:id/like', async (req, res) => {
       if (username !== 'Anonymous') {
         await awardPoints(username, 'POST_LIKED', discussion.location);
       }
+
+      // CREATE NOTIFICATION for post author
+      if (discussion.author !== username && discussion.author !== 'Anonymous') {
+        await NotificationService.notifyPostInteraction(
+          discussion.author,
+          username,
+          'post_liked',
+          discussion.title,
+          discussion._id
+        );
+      }
     }
     
     discussion.likeCount = discussion.likes.length;
@@ -279,6 +331,17 @@ router.post('/:id/vote', async (req, res) => {
       await awardPoints(username, 'POLL_VOTED', discussion.location);
     }
 
+    // CREATE NOTIFICATION for poll author (only if first vote)
+    if (!hasVotedBefore && discussion.author !== username && discussion.author !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.author,
+        username,
+        'poll_voted',
+        discussion.title,
+        discussion._id
+      );
+    }
+
     res.json(discussion);
   } catch (error) {
     console.error('Error voting:', error);
@@ -325,6 +388,18 @@ router.post('/:id/rsvp', async (req, res) => {
     if (!alreadySignedUp && username !== 'Anonymous') {
       const action = discussion.type === 'Event' ? 'EVENT_RSVP' : 'VOLUNTEER_SIGNUP';
       await awardPoints(username, action, discussion.location);
+    }
+
+    // CREATE NOTIFICATION for post author (only if new signup)
+    if (!alreadySignedUp && discussion.author !== username && discussion.author !== 'Anonymous') {
+      const notificationType = discussion.type === 'Event' ? 'event_rsvp' : 'volunteer_signup';
+      await NotificationService.notifyPostInteraction(
+        discussion.author,
+        username,
+        notificationType,
+        discussion.title,
+        discussion._id
+      );
     }
 
     res.json(discussion);
@@ -402,6 +477,17 @@ router.post('/:id/donate', async (req, res) => {
     if (username !== 'Anonymous') {
       await awardPoints(username, 'DONATION_MADE', discussion.location);
     }
+
+    // CREATE NOTIFICATION for post author
+    if (discussion.author !== username && discussion.author !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.author,
+        username,
+        'donation_made',
+        discussion.title,
+        discussion._id
+      );
+    }
     
     res.json(discussion);
   } catch (error) {
@@ -445,6 +531,17 @@ router.post('/:id/offer-help', async (req, res) => {
     // AWARD POINTS FOR OFFERING HELP
     if (username !== 'Anonymous') {
       await awardPoints(username, 'HELP_OFFERED', discussion.location);
+    }
+
+    // CREATE NOTIFICATION for report author - FIXED
+    if (discussion.authorPhone !== username && discussion.authorPhone !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.authorPhone, // Wasif's phone number (recipient)
+        username,              // Shadman's phone number (sender)
+        'help_offered',
+        discussion.title,
+        discussion._id
+      );
     }
 
     res.json(discussion);
@@ -515,6 +612,18 @@ router.patch('/:id/helper/:helperId/status', async (req, res) => {
     helper.status = status;
     await discussion.save();
 
+    // CREATE NOTIFICATION for helper about status change
+    if (helper.username !== authorUsername && helper.username !== 'Anonymous') {
+      await NotificationService.notifyHelpStatusChange(
+        authorUsername,
+        helper.username,
+        status,
+        discussion.title,
+        discussion._id,
+        helperId
+      );
+    }
+
     res.json(discussion);
   } catch (error) {
     console.error('Error updating helper status:', error);
@@ -553,7 +662,8 @@ router.patch('/:id/resolve', async (req, res) => {
   }
 });
 
-// Add comment
+
+
 router.post('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
@@ -574,9 +684,36 @@ router.post('/:id/comments', async (req, res) => {
       return res.status(400).json({ message: 'Comment content is required' });
     }
 
+    // Find the user by phone number to get their name and profile picture
+    let authorName = 'Anonymous';
+    let authorProfilePicture = null;
+    
+    if (author && author !== 'Anonymous') {
+      try {
+        const user = await User.findOne({ phone: author });
+        if (user) {
+          // CRITICAL FIX: Properly format the display name
+          if (user.fname && user.lname) {
+            authorName = `${user.fname} ${user.lname}`.trim();
+          } else if (user.username) {
+            authorName = user.username.trim();
+          } else {
+            // Fallback to a formatted version of phone
+            authorName = `User ${user.phone.slice(-4)}`;
+          }
+          authorProfilePicture = user.profilePic;
+        }
+      } catch (userError) {
+        console.error('Error finding user for comment author:', userError);
+        authorName = 'Anonymous';
+      }
+    }
+
     const newComment = {
       content: content.trim(),
-      author,
+      author: authorName, // THIS IS THE KEY FIX - store the display name, not phone
+      authorPhone: author, // Store phone separately for backend operations
+      authorProfilePicture,
       createdAt: new Date(),
       status: 'active'
     };
@@ -589,6 +726,17 @@ router.post('/:id/comments', async (req, res) => {
       await awardPoints(author, 'COMMENT_ADDED', discussion.location);
     }
 
+    // CREATE NOTIFICATION for post author
+    if (discussion.authorPhone !== author && discussion.authorPhone !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.authorPhone,
+        author,
+        'comment_added',
+        discussion.title,
+        discussion._id
+      );
+    }
+
     // Return the newly added comment
     const addedComment = discussion.comments[discussion.comments.length - 1];
     res.status(201).json(addedComment);
@@ -598,77 +746,12 @@ router.post('/:id/comments', async (req, res) => {
   }
 });
 
-// Get comments for a discussion
-router.get('/:id/comments', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return res.status(400).json({ message: 'Invalid discussion ID' });
-    }
-    
-    const discussion = await Discussion.findById(id);
-    
-    if (!discussion) {
-      return res.status(404).json({ message: 'Discussion not found' });
-    }
-
-    // Filter out removed comments
-    const activeComments = discussion.comments.filter(comment => comment.status === 'active');
-    res.json(activeComments);
-  } catch (error) {
-    console.error('Error fetching comments:', error);
-    res.status(500).json({ message: 'Error fetching comments' });
-  }
-});
-
-// Update comment status (for moderation)
-router.patch('/:discussionId/comments/:commentId', async (req, res) => {
-  try {
-    const { discussionId, commentId } = req.params;
-    const { status } = req.body;
-
-    // Validate ObjectIds
-    if (!isValidObjectId(discussionId)) {
-      return res.status(400).json({ message: 'Invalid discussion ID' });
-    }
-    
-    if (!isValidObjectId(commentId)) {
-      return res.status(400).json({ message: 'Invalid comment ID' });
-    }
-
-    if (!['active', 'flagged', 'removed'].includes(status)) {
-      return res.status(400).json({ message: 'Invalid status' });
-    }
-
-    const discussion = await Discussion.findById(discussionId);
-    if (!discussion) {
-      return res.status(404).json({ message: 'Discussion not found' });
-    }
-
-    const comment = discussion.comments.id(commentId);
-    if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
-    }
-
-    comment.status = status;
-    await discussion.save();
-
-    res.json({ message: 'Comment status updated', comment });
-  } catch (error) {
-    console.error('Error updating comment status:', error);
-    res.status(500).json({ message: 'Error updating comment status' });
-  }
-});
-
 // Delete discussion (only by author)
-// Make sure your route is properly defined
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { author } = req.body;
-    
+    const { author, authorPhone } = req.body;
+
     console.log('DELETE request received:', { id, author });
     
     if (!isValidObjectId(id)) {
@@ -686,7 +769,7 @@ router.delete('/:id', async (req, res) => {
     console.log('Request author:', author);
 
     // Check exact match for author
-    if (discussion.author.trim() !== author.trim()) {
+    if (discussion.authorPhone !== authorPhone) {
       return res.status(403).json({ 
         message: 'You can only delete your own posts',
         discussionAuthor: discussion.author,
@@ -709,4 +792,5 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: 'Error deleting discussion' });
   }
 });
+
 module.exports = router;

@@ -7,7 +7,6 @@ const os = require('os');
 const path = require('path');
 require('dotenv').config();
 
-
 dotenv.config();
 
 const app = express();
@@ -18,7 +17,6 @@ app.use(cors());
 // Increase payload size limits for media uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -36,6 +34,7 @@ const accountRoutes = require('./routes/AccountCreate');
 const phoneAuthRoutes = require('./routes/loginAuth');
 const userInfoRoutes = require('./routes/UserInfo');
 const locationRoutes = require('./routes/locations');
+const notificationRoutes = require('./routes/notifications'); // Add notification routes
 const ticketRoutes = require('./routes/tickets');
 
 
@@ -53,6 +52,31 @@ app.use('/api/account', accountRoutes);
 app.use('/api', phoneAuthRoutes);
 app.use('/api/user', userInfoRoutes);
 app.use('/api/locations', locationRoutes);
+app.use('/api/notifications', notificationRoutes); // Add notification routes
+
+// ===== Scheduled Tasks =====
+const NotificationService = require('./services/notificationService');
+
+// Check leaderboard and create notifications weekly (run this with a cron job in production)
+const scheduleLeaderboardCheck = () => {
+  // Check weekly leaderboard every Sunday at midnight
+  setInterval(async () => {
+    const now = new Date();
+    if (now.getDay() === 0 && now.getHours() === 0) { // Sunday at midnight
+      console.log('Running weekly leaderboard check...');
+      await NotificationService.checkLeaderboardChanges('weekly');
+    }
+  }, 60 * 60 * 1000); // Check every hour
+
+  // Clean up old notifications daily at 2 AM
+  setInterval(async () => {
+    const now = new Date();
+    if (now.getHours() === 2) {
+      console.log('Cleaning up old notifications...');
+      await NotificationService.cleanupOldNotifications();
+    }
+  }, 60 * 60 * 1000); // Check every hour
+};
 app.use('/api/tickets', ticketRoutes);
 
 // ===== Health check endpoint =====
@@ -74,6 +98,7 @@ app.get('/community', (req, res) => {
       '/api/emergency-reports',
       '/api/emergency-contacts',
       '/api/announcements',
+      '/api/notifications',
       '/api/admin',
       '/api/moderation',
       '/api/upload'
@@ -140,6 +165,9 @@ mongoose.connect(
 )
 .then(() => {
   console.log('MongoDB Connected');
+
+  // Start scheduled tasks
+  scheduleLeaderboardCheck();
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);

@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const CommentSchema = new mongoose.Schema({
   content: { type: String, required: true },
   author: { type: String, default: "Anonymous" },
+  authorProfilePicture: { type: mongoose.Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now },
   status: { 
     type: String, 
@@ -23,6 +24,8 @@ const DiscussionSchema = new mongoose.Schema({
     enum: ['Report', 'Poll', 'Event', 'Donation', 'Volunteer']
   },
   author: { type: String, default: "Anonymous" },
+  authorPhone: { type: String }, // Add this field for identification
+  authorProfilePicture: { type: mongoose.Schema.Types.Mixed },
   location: { type: String, required: true },
   time: { type: String, default: "Just now" },
   image: { type: String },
