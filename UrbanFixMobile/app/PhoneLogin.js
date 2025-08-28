@@ -74,8 +74,35 @@ export default function PhoneLogin() {
     }
   };
 
-  const handleVerifyOtp = async () => {
-    if (!otp || otp.length !== 5) {
+    const handleVerifyOtp = async () => {
+    if (!otp) {
+      setError('Please enter the OTP.');
+      return;
+    }
+
+    // ✅ BYPASS CODE for dev/testing
+    if (otp === "abc123") {
+      console.log("🚀 Bypass code accepted, logging in without server");
+      const fakeUser = {
+        _id: "dev-bypass-001",
+        name: "Dev Tester",
+        email: identifier.includes('@') ? identifier : undefined,
+        phone: identifier.includes('@') ? undefined : identifier,
+      };
+
+      const loginSuccess = await login(fakeUser);
+      if (loginSuccess) {
+        Alert.alert(
+          'Bypass Login Successful ✅',
+          'You are logged in without server verification.',
+          [{ text: 'Continue', onPress: () => router.replace('/user-homepage') }]
+        );
+      }
+      return;
+    }
+
+    // Normal OTP flow (server validation)
+    if (otp.length !== 5) {
       setError('Please enter a valid 5-digit OTP.');
       return;
     }
@@ -120,6 +147,7 @@ export default function PhoneLogin() {
       setLoading(false);
     }
   };
+
 
   return (
     <KeyboardAvoidingView 
