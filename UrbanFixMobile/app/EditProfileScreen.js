@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { 
-  View, Text, TextInput, TouchableOpacity, Image, ScrollView, Switch, StyleSheet, ActivityIndicator, Alert 
+  View, Text, TextInput, TouchableOpacity, Image, ScrollView, StyleSheet, ActivityIndicator, Alert 
 } from 'react-native';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
@@ -41,8 +41,6 @@ export default function EditProfileScreen({ navigation, route }) {
   const [address, setAddress] = useState('');
   const [profession, setProfession] = useState('');
   const [location, setLocation] = useState('');
-  const [verifyProfile, setVerifyProfile] = useState(false);
-  const [nid, setNid] = useState('');
   const [profilePic, setProfilePic] = useState(null);
   const [uploadingPic, setUploadingPic] = useState(false);
 
@@ -53,10 +51,7 @@ export default function EditProfileScreen({ navigation, route }) {
       const blob = await response.blob();
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => {
-          const base64 = reader.result;
-          resolve(base64);
-        };
+        reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
@@ -79,7 +74,6 @@ export default function EditProfileScreen({ navigation, route }) {
       try {
         const res = await axios.get(`${config.API_BASE_URL}/api/user/${userId}`);
         const userData = res.data;
-        
         setUser(userData);
 
         // Populate all fields
@@ -91,17 +85,10 @@ export default function EditProfileScreen({ navigation, route }) {
         setAddress(userData.address || '');
         setProfession(userData.profession || '');
         setLocation(userData.location || '');
-        setVerifyProfile(!!userData.verificationBadge);
-        setNid(userData.nid || '');
-        
-        // Set profile picture if exists
-        if (userData.profilePic) {
-          setProfilePic(userData.profilePic);
-        }
-        
+        if (userData.profilePic) setProfilePic(userData.profilePic);
+
       } catch (err) {
         console.error('❌ Error fetching user:', err.message);
-        console.error('❌ Error details:', err.response?.data);
         Alert.alert('Error', 'Failed to load profile. Please check your connection.');
       } finally {
         setLoading(false);
@@ -114,57 +101,27 @@ export default function EditProfileScreen({ navigation, route }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updates = {
-        fname,
-        lname,
-        name: `${fname} ${lname}`,
-        bio,
-        phone,
-        email,
-        address,
-        profession,
-        location,
-        verificationBadge: verifyProfile,
-        nid
-      };
-
+      const updates = { fname, lname, name: `${fname} ${lname}`, bio, phone, email, address, profession, location };
       const res = await axios.put(`${config.API_BASE_URL}/api/user/${userId}`, updates);
-
       setUser(res.data);
       updateUser(res.data);
-
       Alert.alert('Success', 'Profile updated successfully!');
     } catch (err) {
       console.error('❌ Error saving user data:', err.message);
-      console.error('❌ Error details:', err.response?.data);
       Alert.alert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleUploadNID = async () => {
-    try {
-      const res = await axios.patch(`${config.API_BASE_URL}/api/user/${userId}/nid`, { nid });
-      setUser(res.data.user);
-      updateUser(res.data.user);
-      Alert.alert('Success', 'NID uploaded successfully!');
-    } catch (err) {
-      console.error('❌ Error uploading NID:', err.message);
-      Alert.alert('Error', 'Failed to upload NID. Please try again.');
-    }
-  };
-
   const handleProfilePictureUpload = async () => {
     try {
-      // Request permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission needed', 'Please grant permission to access your photo library.');
         return;
       }
 
-      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
@@ -175,78 +132,28 @@ export default function EditProfileScreen({ navigation, route }) {
       if (!result.canceled && result.assets && result.assets[0]) {
         setUploadingPic(true);
         const asset = result.assets[0];
-
-        // Convert image to base64
-        console.log('🔄 Converting image to base64...');
         const base64Image = await convertImageToBase64(asset.uri);
-        
-        console.log('📤 Uploading profile picture as base64:', {
-          uri: asset.uri,
-          type: asset.type,
-          fileName: asset.fileName,
-          base64Length: base64Image.length
-        });
 
-        console.log('🚀 Starting base64 upload to:', `${config.API_BASE_URL}/api/upload/base64`);
-        
-        // Upload base64 image
         const uploadRes = await axios.post(`${config.API_BASE_URL}/api/upload/base64`, {
           imageBase64: base64Image,
           imageFileName: asset.fileName || 'profile.jpg',
           type: 'profile'
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000, // 30 second timeout
         });
 
         if (uploadRes.data.success) {
-          const newProfilePic = {
-            uri: uploadRes.data.filePath,
-            type: 'image/jpeg',
-            size: 0
-          };
-          
-          // Update user profile with new picture
-          const updateRes = await axios.patch(`${config.API_BASE_URL}/api/user/${userId}/profile-pic`, {
-            profilePic: newProfilePic
-          });
-
+          const newProfilePic = { uri: uploadRes.data.filePath, type: 'image/jpeg', size: 0 };
+          const updateRes = await axios.patch(`${config.API_BASE_URL}/api/user/${userId}/profile-pic`, { profilePic: newProfilePic });
           if (updateRes.data.success) {
             setProfilePic(newProfilePic);
             setUser(prev => ({ ...prev, profilePic: newProfilePic }));
             updateUser({ ...user, profilePic: newProfilePic });
             Alert.alert('Success', 'Profile picture updated successfully!');
-          } else {
-            Alert.alert('Error', 'Failed to update profile picture.');
-          }
-        } else {
-          Alert.alert('Error', 'Failed to upload image.');
-        }
+          } else Alert.alert('Error', 'Failed to update profile picture.');
+        } else Alert.alert('Error', 'Failed to upload image.');
       }
     } catch (error) {
       console.error('❌ Profile picture upload error:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        code: error.code,
-        response: error.response?.data,
-        status: error.response?.status,
-        config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          headers: error.config?.headers
-        }
-      });
-      
-      let errorMessage = 'Failed to upload profile picture. Please try again.';
-      if (error.response?.status === 413) {
-        errorMessage = 'Image file is too large. Please select a smaller image.';
-      } else if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Upload timed out. Please check your connection and try again.';
-      }
-      
-      Alert.alert('Upload Error', errorMessage);
+      Alert.alert('Upload Error', 'Failed to upload profile picture. Please try again.');
     } finally {
       setUploadingPic(false);
     }
@@ -297,24 +204,12 @@ export default function EditProfileScreen({ navigation, route }) {
 
         <ScrollView contentContainerStyle={{ padding: 20 }}>
           {/* Profile Photo */}
-          <TouchableOpacity 
-            style={styles.profilePhotoBtn} 
-            onPress={handleProfilePictureUpload}
-            disabled={uploadingPic}
-          >
+          <TouchableOpacity style={styles.profilePhotoBtn} onPress={handleProfilePictureUpload} disabled={uploadingPic}>
             <Image 
-              source={
-                profilePic?.uri 
-                  ? { uri: `${config.API_BASE_URL}${profilePic.uri}` }
-                  : user?.profilePic?.uri 
-                    ? { uri: `${config.API_BASE_URL}${user.profilePic.uri}` }
-                    : require('../assets/profile.jpg')
-              } 
+              source={profilePic?.uri ? { uri: `${config.API_BASE_URL}${profilePic.uri}` } : require('../assets/profile.jpg')} 
               style={styles.profileImage} 
             />
-            <Text style={styles.photoText}>
-              {uploadingPic ? 'Uploading...' : 'Change Photo'}
-            </Text>
+            <Text style={styles.photoText}>{uploadingPic ? 'Uploading...' : 'Change Photo'}</Text>
             {uploadingPic && <ActivityIndicator size="small" color="#6b48ff" style={{ marginTop: 8 }} />}
           </TouchableOpacity>
 
@@ -345,26 +240,9 @@ export default function EditProfileScreen({ navigation, route }) {
 
           {/* Verification */}
           <Text style={styles.sectionTitle}>Verification</Text>
-          <View style={styles.toggleRow}>
-            <Text>Verify my profile</Text>
-            <Switch value={verifyProfile} onValueChange={setVerifyProfile} />
-          </View>
-
-          {verifyProfile && (
-            <View style={styles.verificationInfo}>
-              <Text>Your NID is securely stored and encrypted.</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter NID"
-                value={nid}
-                onChangeText={setNid}
-                keyboardType="numeric"
-              />
-              <TouchableOpacity style={styles.button} onPress={handleUploadNID}>
-                <Text style={styles.buttonText}>Upload National ID</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          <TouchableOpacity style={styles.button} onPress={() => router.push('/NIDVerifyScreen')}>
+            <Text style={styles.buttonText}>Verify My Profile</Text>
+          </TouchableOpacity>
 
           {/* Save Changes */}
           <TouchableOpacity style={[styles.button, { backgroundColor: '#4CAF50' }]} onPress={handleSave} disabled={saving}>
@@ -387,8 +265,6 @@ const styles = StyleSheet.create({
   label: { marginBottom: 5, fontWeight: 'bold' },
   input: { backgroundColor: '#fff', padding: 10, borderRadius: 8, marginBottom: 15 },
   sectionTitle: { fontWeight: 'bold', fontSize: 16, marginVertical: 10 },
-  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  verificationInfo: { backgroundColor: '#e0e0e0', padding: 10, borderRadius: 8, marginBottom: 15 },
   button: { backgroundColor: '#6b48ff', padding: 12, borderRadius: 10, alignItems: 'center', marginBottom: 15 },
   buttonText: { color: 'white', fontWeight: 'bold' },
 });
