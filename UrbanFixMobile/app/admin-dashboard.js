@@ -179,6 +179,27 @@ export default function AdminDashboard() {
               <Ionicons name="information-circle-outline" size={20} color="#6366f1" />
             </TouchableOpacity>
             <TouchableOpacity 
+              style={styles.infoButton}
+              onPress={async () => {
+                try {
+                  const response = await fetch(apiUrl('/api/admin/profile'), {
+                    headers: {
+                      'Authorization': `Bearer ${session?.token}`,
+                    },
+                  });
+                  if (response.ok) {
+                    Alert.alert('✅ Token Test', 'Admin token is working correctly!');
+                  } else {
+                    Alert.alert('❌ Token Test Failed', `Status: ${response.status}\n${await response.text()}`);
+                  }
+                } catch (error) {
+                  Alert.alert('❌ Token Test Error', error.message);
+                }
+              }}
+            >
+              <Ionicons name="checkmark-circle-outline" size={20} color="#10b981" />
+            </TouchableOpacity>
+            <TouchableOpacity 
               style={styles.logoutButton} 
               onPress={handleLogout}
             >

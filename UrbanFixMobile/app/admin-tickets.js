@@ -200,7 +200,7 @@ export default function AdminTickets() {
 
   const handleTicketPress = (ticket) => {
     router.push({
-      pathname: '/ticket-detail',
+      pathname: '/admin-ticket-detail',
       params: { ticketId: ticket._id }
     });
   };

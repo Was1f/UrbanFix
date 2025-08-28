@@ -60,10 +60,7 @@ const ticketSchema = new mongoose.Schema({
     default: 'general'
   },
   messages: [messageSchema],
-  assignedAdmin: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Admin'
-  },
+
   resolvedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'
@@ -83,7 +80,7 @@ const ticketSchema = new mongoose.Schema({
 // Indexes for efficient queries
 ticketSchema.index({ user: 1, status: 1 });
 ticketSchema.index({ status: 1, priority: 1 });
-ticketSchema.index({ assignedAdmin: 1, status: 1 });
+
 ticketSchema.index({ isArchived: 1, status: 1 });
 ticketSchema.index({ createdAt: -1 });
 

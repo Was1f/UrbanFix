@@ -36,29 +36,47 @@ export default function TicketDetail() {
 
   useEffect(() => {
     checkUserType();
-    fetchTicket();
   }, [ticketId]);
+
+  useEffect(() => {
+    if (ticketId) {
+      fetchTicket();
+    }
+  }, [ticketId, isAdmin, adminSession]);
 
 
 
   const checkUserType = async () => {
     try {
       const adminSession = await SessionManager.getAdminSession();
+      console.log('🔍 Admin session check:', { 
+        hasSession: !!adminSession, 
+        hasToken: !!adminSession?.token,
+        tokenLength: adminSession?.token?.length 
+      });
       if (adminSession) {
         setIsAdmin(true);
         setAdminSession(adminSession);
+        console.log('✅ Admin session set successfully');
       }
     } catch (error) {
-      console.log('Not an admin session');
+      console.log('❌ Not an admin session:', error);
     }
   };
 
   const fetchTicket = async () => {
     try {
       setLoading(true);
+      console.log('🔍 Fetching ticket:', { 
+        ticketId, 
+        isAdmin, 
+        hasAdminSession: !!adminSession,
+        hasToken: !!adminSession?.token 
+      });
       
       if (isAdmin) {
         // Admin request - use JWT token
+        console.log('🔍 Making admin request with token:', adminSession?.token?.substring(0, 20) + '...');
         const response = await axios.get(apiUrl(`/api/tickets/${ticketId}`), {
           headers: {
             'Authorization': `Bearer ${adminSession?.token}`,
@@ -67,17 +85,20 @@ export default function TicketDetail() {
         
         if (response.data.success) {
           setTicket(response.data.ticket);
+          console.log('✅ Admin ticket fetch successful');
         }
       } else {
         // User request - pass userId as query parameter, no JWT token
+        console.log('🔍 Making user request for userId:', user?._id);
         const response = await axios.get(apiUrl(`/api/tickets/${ticketId}?userId=${user._id}`));
         
         if (response.data.success) {
           setTicket(response.data.ticket);
+          console.log('✅ User ticket fetch successful');
         }
       }
     } catch (error) {
-      console.error('Error fetching ticket:', error);
+      console.error('❌ Error fetching ticket:', error);
       Alert.alert('Error', 'Failed to load ticket. Please try again.');
     } finally {
       setLoading(false);
@@ -169,6 +190,7 @@ export default function TicketDetail() {
     try {
       if (isAdmin) {
         // Admin message - use JWT token
+        console.log('🔍 Sending admin message with token:', adminSession?.token?.substring(0, 20) + '...');
         const response = await axios.post(apiUrl(`/api/tickets/${ticketId}/messages`), {
           content: message.trim(),
           attachments

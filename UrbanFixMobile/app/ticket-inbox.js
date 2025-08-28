@@ -102,7 +102,7 @@ export default function TicketInbox() {
 
   const handleTicketPress = (ticket) => {
     router.push({
-      pathname: '/ticket-detail',
+      pathname: '/user-ticket-detail',
       params: { ticketId: ticket._id }
     });
   };

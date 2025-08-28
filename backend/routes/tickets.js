@@ -40,10 +40,10 @@ const authenticateAdmin = async (req, res, next) => {
     }
 
     const jwtSecret = process.env.JWT_SECRET || 'urbanfix_jwt_secret_key_2024';
-    console.log('🔍 Verifying JWT token with secret:', jwtSecret ? 'SECRET_SET' : 'USING_FALLBACK');
+    //console.log('🔍 Verifying JWT token with secret:', jwtSecret ? 'SECRET_SET' : 'USING_FALLBACK');
     
     const decoded = jwt.verify(token, jwtSecret);
-    console.log('🔍 JWT decoded successfully:', { adminId: decoded.adminId, username: decoded.username, role: decoded.role });
+    // console.log('🔍 JWT decoded successfully:', { adminId: decoded.adminId, username: decoded.username, role: decoded.role });
     
     const admin = await Admin.findById(decoded.adminId);
     
@@ -52,7 +52,7 @@ const authenticateAdmin = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid or inactive admin' });
     }
 
-    console.log('✅ Admin authenticated successfully:', { adminId: admin._id, username: admin.username });
+    // console.log('✅ Admin authenticated successfully:', { adminId: admin._id, username: admin.username });
     req.admin = admin;
     next();
   } catch (error) {
@@ -146,7 +146,6 @@ router.get('/user/:userId', async (req, res) => {
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('user', 'fname lname phone email')
-      .populate('assignedAdmin', 'username email')
       .populate('resolvedBy', 'username email')
       .populate('messages.sender', 'fname lname username email')
       .lean(); // Use lean() to preserve senderModel in messages
@@ -183,14 +182,25 @@ router.get('/:ticketId', async (req, res) => {
     if (token) {
       // Admin request - verify JWT token
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const jwtSecret = process.env.JWT_SECRET || 'urbanfix_jwt_secret_key_2024';
+        const decoded = jwt.verify(token, jwtSecret);
         if (decoded.adminId) {
           admin = await Admin.findById(decoded.adminId);
+          if (!admin || !admin.isActive) {
+            return res.status(401).json({ message: 'Invalid or inactive admin account' });
+          }
         } else if (decoded.userId) {
           user = await User.findById(decoded.userId);
+          if (!user || user.isBanned) {
+            return res.status(401).json({ message: 'Invalid or banned user' });
+          }
         }
       } catch (error) {
-        return res.status(401).json({ message: 'Invalid token' });
+        console.error('❌ JWT verification error:', error.message);
+        if (error.name === 'TokenExpiredError') {
+          console.error('❌ Token expired at:', error.expiredAt);
+        }
+        return res.status(401).json({ message: 'Invalid admin token' });
       }
     } else if (userId) {
       // User request - verify userId
@@ -204,7 +214,6 @@ router.get('/:ticketId', async (req, res) => {
 
     const ticket = await Ticket.findById(ticketId)
       .populate('user', 'fname lname phone email')
-      .populate('assignedAdmin', 'username email')
       .populate('resolvedBy', 'username email')
       .populate('messages.sender', 'fname lname username email')
       .lean(); // Use lean() to get plain objects and preserve senderModel
@@ -249,18 +258,30 @@ router.post('/:ticketId/messages', async (req, res) => {
 
     // Check if this is a user message (no token, has userId) or admin message (has token)
     if (token) {
-      // Admin message - verify JWT token
+      // Admin message - use the same authentication logic as other admin routes
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const jwtSecret = process.env.JWT_SECRET || 'urbanfix_jwt_secret_key_2024';
+        const decoded = jwt.verify(token, jwtSecret);
+        
         if (decoded.adminId) {
           admin = await Admin.findById(decoded.adminId);
+          if (!admin || !admin.isActive) {
+            return res.status(401).json({ message: 'Invalid or inactive admin account' });
+          }
           senderModel = 'Admin';
         } else if (decoded.userId) {
           user = await User.findById(decoded.userId);
+          if (!user || user.isBanned) {
+            return res.status(401).json({ message: 'Invalid or banned user' });
+          }
           senderModel = 'User';
         }
       } catch (error) {
-        return res.status(401).json({ message: 'Invalid token' });
+        console.error('❌ JWT verification error:', error.message);
+        if (error.name === 'TokenExpiredError') {
+          console.error('❌ Token expired at:', error.expiredAt);
+        }
+        return res.status(401).json({ message: 'Invalid admin token' });
       }
     } else if (userId) {
       // User message - verify userId
@@ -292,9 +313,6 @@ router.post('/:ticketId/messages', async (req, res) => {
     // Update ticket status if admin is responding
     if (admin && ticket.status === 'open') {
       ticket.status = 'in_progress';
-      if (!ticket.assignedAdmin) {
-        ticket.assignedAdmin = admin._id;
-      }
     }
 
     await ticket.addMessage(senderId, senderModel, content, attachments || []);
@@ -302,7 +320,6 @@ router.post('/:ticketId/messages', async (req, res) => {
     // Populate the ticket before sending response to ensure senderModel is preserved
     const populatedTicket = await Ticket.findById(ticketId)
       .populate('user', 'fname lname phone email')
-      .populate('assignedAdmin', 'username email')
       .populate('resolvedBy', 'username email')
       .populate('messages.sender', 'fname lname username email')
       .lean();
@@ -323,7 +340,7 @@ router.post('/:ticketId/messages', async (req, res) => {
 // Get all tickets for admin (Admin only)
 router.get('/admin/all', authenticateAdmin, async (req, res) => {
   try {
-    const { status, priority, category, search, assignedToMe, sort = 'createdAt', order = 'desc', page = 1, limit = 20 } = req.query;
+    const { status, priority, category, search, sort = 'createdAt', order = 'desc', page = 1, limit = 20 } = req.query;
     
     const query = {};
     
@@ -339,9 +356,7 @@ router.get('/admin/all', authenticateAdmin, async (req, res) => {
       query.category = category;
     }
     
-    if (assignedToMe === 'true') {
-      query.assignedAdmin = req.admin._id;
-    }
+
     
     if (search) {
       query.$or = [
@@ -358,7 +373,6 @@ router.get('/admin/all', authenticateAdmin, async (req, res) => {
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('user', 'fname lname phone email')
-      .populate('assignedAdmin', 'username email')
       .populate('resolvedBy', 'username email')
       .populate('messages.sender', 'fname lname username email')
       .lean(); // Use lean() to preserve senderModel in messages
@@ -417,7 +431,6 @@ router.get('/admin/archived', authenticateAdmin, async (req, res) => {
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
       .populate('user', 'fname lname phone email')
-      .populate('assignedAdmin', 'username email')
       .populate('resolvedBy', 'username email')
       .populate('messages.sender', 'fname lname username email')
       .lean(); // Use lean() to preserve senderModel in messages
@@ -473,43 +486,7 @@ router.patch('/:ticketId/status', authenticateAdmin, async (req, res) => {
   }
 });
 
-// Assign ticket to admin (Admin only)
-router.patch('/:ticketId/assign', authenticateAdmin, async (req, res) => {
-  try {
-    const { ticketId } = req.params;
-    const { adminId } = req.body;
 
-    if (!adminId) {
-      return res.status(400).json({ message: 'Admin ID is required' });
-    }
-
-    const admin = await Admin.findById(adminId);
-    if (!admin || !admin.isActive) {
-      return res.status(400).json({ message: 'Invalid admin' });
-    }
-
-    const ticket = await Ticket.findById(ticketId);
-    if (!ticket) {
-      return res.status(404).json({ message: 'Ticket not found' });
-    }
-
-    ticket.assignedAdmin = adminId;
-    if (ticket.status === 'open') {
-      ticket.status = 'in_progress';
-    }
-
-    await ticket.save();
-
-    res.json({
-      success: true,
-      message: 'Ticket assigned successfully',
-      ticket
-    });
-  } catch (error) {
-    console.error('Error assigning ticket:', error);
-    res.status(500).json({ message: 'Failed to assign ticket' });
-  }
-});
 
 // Get ticket statistics (Admin only)
 router.get('/admin/stats', authenticateAdmin, async (req, res) => {
