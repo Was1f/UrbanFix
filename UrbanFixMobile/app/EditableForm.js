@@ -1,24 +1,24 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { useLocation, useRouter } from 'expo-router';
 
-const EditableForm = ({ route, navigation }) => {
-  // Receive extracted data from previous screen
-  const { extractedData } = route.params;
+const EditableForm = () => {
+  const location = useLocation();
+  const router = useRouter();
+
+  // Directly get object from state
+  const extractedData = location.state?.extractedData || { name: '', dob: '', nid: '' };
 
   const [formData, setFormData] = useState({
-    name: extractedData.name || '',
-    dob: extractedData.dob || '',
-    nid: extractedData.nid || ''
+    name: extractedData.name,
+    dob: extractedData.dob,
+    nid: extractedData.nid,
   });
 
   const handleSave = () => {
-    // Here you will eventually call your API to update user info
-    // Example payload:
-    const payload = { nid: formData.nid };
-    console.log('Updated user data:', payload);
-
+    console.log('Updated user data:', formData);
     Alert.alert('Success', 'NID verification completed!');
-    navigation.goBack(); // Go back to previous screen
+    router.back();
   };
 
   return (
@@ -54,11 +54,11 @@ const EditableForm = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20 },
+  container: { flexGrow: 1, padding: 20, backgroundColor: '#fff' },
   title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, marginBottom: 15 },
   saveButton: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 20 },
-  saveText: { color: 'white', fontWeight: '600', fontSize: 16 }
+  saveText: { color: 'white', fontWeight: '600', fontSize: 16 },
 });
 
 export default EditableForm;

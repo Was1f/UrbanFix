@@ -15,7 +15,7 @@ import AnnouncementsList from './app/announcements-list';
 import SplashScreen from './app/SplashScreen';
 
 // NID verification screens
-import NIDVerifyScreen from './app/NIDVerifyScreen';
+import NidVerifyScreen from './app/nidVerifyScreen';
 import UploadScanNID from './app/UploadScanNID';
 import EditableForm from './app/EditableForm';
 
@@ -59,7 +59,7 @@ function AppNavigator() {
           <Stack.Screen name="AnnouncementsList" component={AnnouncementsList} />
 
           {/* NID verification flow */}
-          <Stack.Screen name="NIDVerifyScreen" component={NIDVerifyScreen} />
+          <Stack.Screen name="NidVerifyScreen" component={NidVerifyScreen} />
           <Stack.Screen name="UploadScanNID" component={UploadScanNID} />
           <Stack.Screen name="EditableForm" component={EditableForm} />
         </>

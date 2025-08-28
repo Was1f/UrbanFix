@@ -1,7 +1,14 @@
 import React from 'react';
-import { View, Text, ScrollView, Button, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 
-const NIDVerifyScreen = ({ navigation }) => {
+const NIDVerifyScreen = () => {
+  const router = useRouter();
+
+  const handleStartVerification = () => {
+    router.push('/UploadScanNID');
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.content}>
@@ -9,10 +16,9 @@ const NIDVerifyScreen = ({ navigation }) => {
         <Text style={styles.description}>
           Scan both sides of your NID card. Ensure the images are clear and readable.
         </Text>
-        <Button
-          title="Start NID Verification"
-          onPress={() => navigation.navigate('UploadScanNID')} // Navigate to UploadScanNID screen
-        />
+        <TouchableOpacity style={styles.button} onPress={handleStartVerification}>
+          <Text style={styles.buttonText}>Start NID Verification</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -25,20 +31,11 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#fff',
   },
-  content: {
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  description: {
-    fontSize: 16,
-    marginBottom: 20,
-    color: '#555',
-    textAlign: 'center',
-  },
+  content: { alignItems: 'center' },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 15 },
+  description: { fontSize: 16, marginBottom: 20, color: '#555', textAlign: 'center' },
+  button: { backgroundColor: '#6b48ff', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 8 },
+  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
 
 export default NIDVerifyScreen;

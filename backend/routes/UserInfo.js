@@ -77,24 +77,28 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Upload NID & verification
+// Upload NID & verification (with name & dob)
 router.patch('/:id/nid', async (req, res) => {
   const userId = req.params.id;
-  const { nid } = req.body;
+  const { nid, name, dob } = req.body;
+
   if (!nid) return res.status(400).json({ message: 'NID is required' });
 
   try {
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { nid, verificationBadge: true },
-      { new: true }
-    );
+    const updates = { nid, verificationBadge: true };
+    if (name) updates.name = name;
+    if (dob) updates.dob = dob;
+
+    const user = await User.findByIdAndUpdate(userId, updates, { new: true });
     if (!user) return res.status(404).json({ message: 'User not found' });
-    res.json({ message: 'NID uploaded successfully', user });
+
+    res.json({ message: 'NID and user info updated successfully', user });
   } catch (err) {
+    console.error('NID update error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 // Update profile picture
 router.patch('/:id/profile-pic', async (req, res) => {

@@ -3,22 +3,22 @@ import {
   View, Text, TextInput, TouchableOpacity, Image, ScrollView, StyleSheet, ActivityIndicator, Alert 
 } from 'react-native';
 import axios from 'axios';
+import { useRouter } from 'expo-router';
 import { AuthContext } from '../context/AuthContext';
 import config from '../config';
 import UserProtectedRoute from '../components/UserProtectedRoute';
 import * as ImagePicker from 'expo-image-picker';
 
-export default function EditProfileScreen({ navigation, route }) {
+export default function EditProfileScreen({ route }) {
   const { updateUser, user: contextUser } = useContext(AuthContext);
+  const router = useRouter();
 
-  // Determine userId from route params or context
   const userId = route?.params?.userId || contextUser?._id;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState(null);
 
-  // Editable fields
   const [fname, setFname] = useState('');
   const [lname, setLname] = useState('');
   const [bio, setBio] = useState('');
@@ -30,7 +30,6 @@ export default function EditProfileScreen({ navigation, route }) {
   const [profilePic, setProfilePic] = useState(null);
   const [uploadingPic, setUploadingPic] = useState(false);
 
-  // Convert image to base64
   const convertImageToBase64 = async (uri) => {
     const response = await fetch(uri);
     const blob = await response.blob();
@@ -42,7 +41,6 @@ export default function EditProfileScreen({ navigation, route }) {
     });
   };
 
-  // Fetch user data
   useEffect(() => {
     const fetchUser = async () => {
       if (!userId) {
@@ -125,7 +123,7 @@ export default function EditProfileScreen({ navigation, route }) {
           if (updateRes.data.success) {
             setProfilePic(newProfilePic);
             setUser(prev => ({ ...prev, profilePic: newProfilePic }));
-            updateUser({ ...user, profilePic: newProfilePic });
+            updateUser(prev => ({ ...prev, profilePic: newProfilePic }));
             Alert.alert('Success', 'Profile picture updated successfully!');
           } else Alert.alert('Error', 'Failed to update profile picture.');
         } else Alert.alert('Error', 'Failed to upload image.');
@@ -170,7 +168,7 @@ export default function EditProfileScreen({ navigation, route }) {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+          <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.headerBtn}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Profile</Text>
@@ -217,7 +215,7 @@ export default function EditProfileScreen({ navigation, route }) {
 
           {/* Verification */}
           <Text style={styles.sectionTitle}>Verification</Text>
-          <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('NIDVerifyScreen')}>
+          <TouchableOpacity style={styles.button} onPress={() => router.push('/nidVerifyScreen')}>
             <Text style={styles.buttonText}>Verify My Profile</Text>
           </TouchableOpacity>
 
