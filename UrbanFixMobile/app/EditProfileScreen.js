@@ -4,29 +4,15 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import config from '../config';
 import UserProtectedRoute from '../components/UserProtectedRoute';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function EditProfileScreen({ navigation, route }) {
   const { updateUser, user: contextUser } = useContext(AuthContext);
-  const router = useRouter();
-  const localParams = useLocalSearchParams();
 
-  // Determine userId from route, params, or context
-  const getUserId = () => {
-    if (route?.params?.userId) return route.params.userId;
-    if (localParams?.userId) return localParams.userId;
-    if (contextUser?._id) return contextUser._id;
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlUserId = urlParams.get('userId');
-      if (urlUserId) return urlUserId;
-    }
-    return null;
-  };
-  const userId = getUserId();
+  // Determine userId from route params or context
+  const userId = route?.params?.userId || contextUser?._id;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -44,21 +30,16 @@ export default function EditProfileScreen({ navigation, route }) {
   const [profilePic, setProfilePic] = useState(null);
   const [uploadingPic, setUploadingPic] = useState(false);
 
-  // Function to convert image to base64
+  // Convert image to base64
   const convertImageToBase64 = async (uri) => {
-    try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.error('❌ Error converting image to base64:', error);
-      throw error;
-    }
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   };
 
   // Fetch user data
@@ -76,7 +57,6 @@ export default function EditProfileScreen({ navigation, route }) {
         const userData = res.data;
         setUser(userData);
 
-        // Populate all fields
         setFname(userData.fname || '');
         setLname(userData.lname || '');
         setBio(userData.bio || '');
@@ -86,9 +66,8 @@ export default function EditProfileScreen({ navigation, route }) {
         setProfession(userData.profession || '');
         setLocation(userData.location || '');
         if (userData.profilePic) setProfilePic(userData.profilePic);
-
       } catch (err) {
-        console.error('❌ Error fetching user:', err.message);
+        console.error('Error fetching user:', err.message);
         Alert.alert('Error', 'Failed to load profile. Please check your connection.');
       } finally {
         setLoading(false);
@@ -107,7 +86,7 @@ export default function EditProfileScreen({ navigation, route }) {
       updateUser(res.data);
       Alert.alert('Success', 'Profile updated successfully!');
     } catch (err) {
-      console.error('❌ Error saving user data:', err.message);
+      console.error('Error saving user data:', err.message);
       Alert.alert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
@@ -152,24 +131,22 @@ export default function EditProfileScreen({ navigation, route }) {
         } else Alert.alert('Error', 'Failed to upload image.');
       }
     } catch (error) {
-      console.error('❌ Profile picture upload error:', error);
+      console.error('Profile picture upload error:', error);
       Alert.alert('Upload Error', 'Failed to upload profile picture. Please try again.');
     } finally {
       setUploadingPic(false);
     }
   };
 
-  if (!userId) {
-    return (
-      <UserProtectedRoute>
-        <View style={styles.container}>
-          <Text style={{ color: 'red', textAlign: 'center', marginTop: 20 }}>
-            No user ID provided. Cannot load profile.
-          </Text>
-        </View>
-      </UserProtectedRoute>
-    );
-  }
+  if (!userId) return (
+    <UserProtectedRoute>
+      <View style={styles.container}>
+        <Text style={{ color: 'red', textAlign: 'center', marginTop: 20 }}>
+          No user ID provided. Cannot load profile.
+        </Text>
+      </View>
+    </UserProtectedRoute>
+  );
 
   if (loading) return (
     <UserProtectedRoute>
@@ -193,7 +170,7 @@ export default function EditProfileScreen({ navigation, route }) {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation?.goBack ? navigation.goBack() : router?.back?.()}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.headerBtn}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Profile</Text>
@@ -240,7 +217,7 @@ export default function EditProfileScreen({ navigation, route }) {
 
           {/* Verification */}
           <Text style={styles.sectionTitle}>Verification</Text>
-          <TouchableOpacity style={styles.button} onPress={() => router.push('/NIDVerifyScreen')}>
+          <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('NIDVerifyScreen')}>
             <Text style={styles.buttonText}>Verify My Profile</Text>
           </TouchableOpacity>
 

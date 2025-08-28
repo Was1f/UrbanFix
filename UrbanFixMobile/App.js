@@ -1,4 +1,3 @@
-// App.js
 import React, { useContext, useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,9 +12,14 @@ import UserHomepage from './app/user-homepage';
 import CommunityHome from './app/community';
 import EmergencyContacts from './app/emergency-contacts';
 import AnnouncementsList from './app/announcements-list';
-import { AuthProvider, AuthContext } from './context/AuthContext';
 import SplashScreen from './app/SplashScreen';
 
+// NID verification screens
+import NIDVerifyScreen from './app/NIDVerifyScreen';
+import UploadScanNID from './app/UploadScanNID';
+import EditableForm from './app/EditableForm';
+
+import { AuthProvider, AuthContext } from './context/AuthContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -23,36 +27,28 @@ function AppNavigator() {
   const { user, loading, checkSessionValidity } = useContext(AuthContext);
   const [sessionChecked, setSessionChecked] = useState(false);
 
-  // Check session validity on app start
   useEffect(() => {
     const validateSession = async () => {
       if (!loading) {
         if (user) {
-          // Check if the current user session is still valid
           const isValid = await checkSessionValidity();
           if (!isValid) {
-            console.log('🔄 Session expired on app start, user will be logged out');
+            console.log('🔄 Session expired, logging out');
           }
         }
         setSessionChecked(true);
       }
     };
-
     validateSession();
   }, [loading, user, checkSessionValidity]);
 
-  if (loading || !sessionChecked) {
-    console.log('🔄 App.js - Showing SplashScreen (loading or session not checked)');
-    return <SplashScreen />;
-  }
-
-  console.log('🚀 App.js - Rendering navigation with user:', user ? 'LOGGED IN' : 'NOT LOGGED IN');
+  if (loading || !sessionChecked) return <SplashScreen />;
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
-        // Logged in → User Dashboard flow
         <>
+          {/* Logged-in flow */}
           <Stack.Screen name="UserHomepage" component={UserHomepage} />
           <Stack.Screen name="Home" component={Home} />
           <Stack.Screen name="Profile" component={Profile} />
@@ -61,10 +57,15 @@ function AppNavigator() {
           <Stack.Screen name="CommunityHome" component={CommunityHome} />
           <Stack.Screen name="EmergencyContacts" component={EmergencyContacts} />
           <Stack.Screen name="AnnouncementsList" component={AnnouncementsList} />
+
+          {/* NID verification flow */}
+          <Stack.Screen name="NIDVerifyScreen" component={NIDVerifyScreen} />
+          <Stack.Screen name="UploadScanNID" component={UploadScanNID} />
+          <Stack.Screen name="EditableForm" component={EditableForm} />
         </>
       ) : (
-        // Not logged in → Login flow
         <>
+          {/* Not logged-in flow */}
           <Stack.Screen name="PhoneLogin" component={PhoneLogin} />
           <Stack.Screen name="AccountCreation" component={CreateAccount} />
         </>

@@ -41,7 +41,7 @@ export default function RootLayout() {
         <Stack.Screen name="CreatePostReport" />
         <Stack.Screen name="leaderboard" />
         <Stack.Screen name="moderation-panel" />
-        <Stack.Screen name="nidVerifyScreen" />
+        <Stack.Screen name="NIDVerifyScreen" />
       </Stack>
     </AuthProvider>
   );
