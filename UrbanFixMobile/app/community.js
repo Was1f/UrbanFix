@@ -21,6 +21,117 @@ import { AuthContext } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
+// ProfilePicture component
+const ProfilePicture = ({ 
+  profilePicture, 
+  name = 'Anonymous', 
+  size = 32,
+  style = {} 
+}) => {
+  // Helper function to get initials from name
+  const getInitials = (fullName) => {
+    if (!fullName || fullName === 'Anonymous') return 'A';
+    
+    const names = fullName.trim().split(' ');
+    if (names.length === 1) {
+      return names[0].charAt(0).toUpperCase();
+    }
+    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
+  };
+
+  // Helper function to get image URL
+  const getImageUrl = (profilePicData) => {
+    if (!profilePicData) return null;
+    
+    // Handle string URLs
+    if (typeof profilePicData === 'string') {
+      if (profilePicData.startsWith('http://') || profilePicData.startsWith('https://')) {
+        return profilePicData;
+      }
+      if (profilePicData.startsWith('/uploads/')) {
+        return apiUrl(profilePicData);
+      }
+      return apiUrl(`/uploads/profile/${profilePicData}`);
+    }
+    
+    // Handle object with uri property (your current structure)
+    if (profilePicData && profilePicData.uri) {
+      if (profilePicData.uri.startsWith('data:')) {
+        return profilePicData.uri; // Base64 data URL
+      }
+      if (profilePicData.uri.startsWith('http://') || profilePicData.uri.startsWith('https://')) {
+        return profilePicData.uri;
+      }
+      if (profilePicData.uri.startsWith('/uploads/')) {
+        return apiUrl(profilePicData.uri);
+      }
+      return apiUrl(`/uploads/profile/${profilePicData.uri}`);
+    }
+    
+    return null;
+  };
+
+  // Generate a consistent color based on the name
+  const getBackgroundColor = (name) => {
+    const colors = [
+      '#ef4444', '#f97316', '#eab308', '#22c55e', 
+      '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', 
+      '#d946ef', '#ec4899', '#f43f5e'
+    ];
+    
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const imageUrl = getImageUrl(profilePicture);
+  const initials = getInitials(name);
+  const backgroundColor = getBackgroundColor(name);
+
+  const containerStyle = {
+    width: size,
+    height: size,
+    borderRadius: size / 2,
+    ...style
+  };
+
+  if (imageUrl) {
+    return (
+      <View style={[profileStyles.container, containerStyle]}>
+        <Image 
+          source={{ uri: imageUrl }}
+          style={[profileStyles.image, { width: size, height: size, borderRadius: size / 2 }]}
+          onError={(error) => {
+            console.log('Profile picture load error:', error.nativeEvent.error);
+          }}
+        />
+      </View>
+    );
+  }
+
+  // Fallback to initials with colored background
+  return (
+    <View style={[
+      profileStyles.container, 
+      containerStyle,
+      { backgroundColor }
+    ]}>
+      <Text style={[
+        profileStyles.initials, 
+        { 
+          fontSize: size * 0.4,
+          lineHeight: size * 0.4
+        }
+      ]}>
+        {initials}
+      </Text>
+    </View>
+  );
+};
+
 const CommunityHome = () => {
   const router = useRouter();
   const { user } = useContext(AuthContext);
@@ -46,7 +157,7 @@ const CommunityHome = () => {
   // Filter and sort options
   const sortOptions = [
     { value: 'popular', label: 'Most Popular', icon: '🔥' },
-    { value: 'recent', label: 'Most Recent', icon: '🕒' },
+    { value: 'recent', label: 'Most Recent', icon: '🕐' },
     { value: 'oldest', label: 'Oldest First', icon: '📅' },
     { value: 'most_comments', label: 'Most Discussed', icon: '💬' },
     { value: 'most_likes', label: 'Most Liked', icon: '❤️' },
@@ -57,7 +168,7 @@ const CommunityHome = () => {
     { value: 'Report', label: 'Reports', icon: '🚨' },
     { value: 'Poll', label: 'Polls', icon: '📊' },
     { value: 'Event', label: 'Events', icon: '📅' },
-    { value: 'Donation', label: 'Donations', icon: '💝' },
+    { value: 'Donation', label: 'Donations', icon: '💰' },
     { value: 'Volunteer', label: 'Volunteer', icon: '🤝' },
   ];
 
@@ -385,7 +496,7 @@ const CommunityHome = () => {
     const configs = {
       Poll: { emoji: '📊', color: '#6366f1', bg: '#eef2ff' },
       Event: { emoji: '📅', color: '#059669', bg: '#ecfdf5' },
-      Donation: { emoji: '💝', color: '#dc2626', bg: '#fef2f2' },
+      Donation: { emoji: '💰', color: '#dc2626', bg: '#fef2f2' },
       Volunteer: { emoji: '🤝', color: '#7c3aed', bg: '#f3e8ff' },
       Report: { emoji: '🚨', color: '#ea580c', bg: '#fff7ed' },
     };
@@ -646,7 +757,7 @@ const CommunityHome = () => {
               style={styles.filterDropdown}
               onPress={() => setShowSortModal(true)}
             >
-              <Text style={styles.filterDropdownEmoji}>🔄</Text>
+              <Text style={styles.filterDropdownEmoji}>🔥</Text>
               <Text style={styles.filterDropdownText}>
                 {sortOptions.find(s => s.value === sortBy)?.label || 'Sort'}
               </Text>
@@ -807,10 +918,18 @@ const CommunityHome = () => {
                     {/* Post Preview Info */}
                     {renderPostPreview(discussion)}
 
-                    {/* Post Footer */}
+                    {/* Post Footer with Profile Picture */}
                     <View style={styles.postFooter}>
                       <View style={styles.postMeta}>
-                        <Text style={styles.authorText}>By {discussion.author || 'Anonymous'}</Text>
+                        <View style={styles.authorContainer}>
+                          <ProfilePicture 
+                            profilePicture={discussion.authorProfilePicture} 
+                            name={discussion.author || 'Anonymous'} 
+                            size={24}
+                            style={{ marginRight: 8 }}
+                          />
+                          <Text style={styles.authorText}>By {discussion.author || 'Anonymous'}</Text>
+                        </View>
                         <View style={styles.engagementStats}>
                           <Text style={styles.statsText}>
                             ❤️ {discussion.likes?.length || 0}
@@ -926,6 +1045,23 @@ const CommunityHome = () => {
     </UserProtectedRoute>
   );
 };
+
+// Profile Picture Styles
+const profileStyles = StyleSheet.create({
+  container: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e2e8f0',
+  },
+  image: {
+    resizeMode: 'cover',
+  },
+  initials: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+});
 
 const styles = StyleSheet.create({
   page: {
@@ -1291,10 +1427,15 @@ const styles = StyleSheet.create({
   postMeta: {
     flex: 1,
   },
+  authorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   authorText: {
     fontSize: 13,
     color: '#64748b',
-    marginBottom: 4,
+    flex: 1,
   },
   engagementStats: {
     flexDirection: 'row',
@@ -1394,7 +1535,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-    locationSection: {
+  locationSection: {
     backgroundColor: '#fff',
     paddingVertical: 12,
     paddingHorizontal: 20,
@@ -1439,4 +1580,3 @@ const styles = StyleSheet.create({
 });
 
 export default CommunityHome;
-  

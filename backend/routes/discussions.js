@@ -106,7 +106,22 @@ router.post('/', async (req, res) => {
       // Volunteer fields
       volunteersNeeded, skills
     } = req.body;
-    
+        // Find the user by phone number to get their name
+    let authorName = 'Anonymous';
+    let authorProfilePicture = null; 
+    if (author && author !== 'Anonymous') {
+      try {
+        const user = await User.findOne({ phone: author });
+        if (user) {
+          authorName = `${user.username}`.trim();
+          authorProfilePicture = user.profilePic;
+        }
+      } catch (userError) {
+        console.error('Error finding user for author name:', userError);
+        authorName = 'Anonymous';
+      }
+    }
+
     if (!title || !type || !location) {
       return res.status(400).json({ 
         message: 'Title, type, and location are required' 
@@ -117,7 +132,9 @@ router.post('/', async (req, res) => {
       title,
       description,
       type,
-      author: author || "Anonymous",
+      author: authorName || "Anonymous",
+      authorPhone: author,
+      authorProfilePicture,
       location,
       image,
       audio,
@@ -643,9 +660,23 @@ router.post('/:id/comments', async (req, res) => {
       return res.status(400).json({ message: 'Comment content is required' });
     }
 
+       // Get author's profile picture
+    let authorProfilePicture = null;
+    if (author && author !== 'Anonymous') {
+      try {
+        const user = await User.findOne({ phone: author });
+        if (user) {
+          authorProfilePicture = user.profilePic;
+        }
+      } catch (userError) {
+        console.error('Error finding user for comment author:', userError);
+      }
+    }
+
     const newComment = {
       content: content.trim(),
       author,
+      authorProfilePicture,
       createdAt: new Date(),
       status: 'active'
     };
@@ -678,10 +709,11 @@ router.post('/:id/comments', async (req, res) => {
   }
 });
 
-// Get comments for a discussion
-router.get('/:id/comments', async (req, res) => {
+// Add comment
+router.post('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
+    const { content, author = 'Anonymous' } = req.body;
     
     // Validate ObjectId
     if (!isValidObjectId(id)) {
@@ -694,12 +726,61 @@ router.get('/:id/comments', async (req, res) => {
       return res.status(404).json({ message: 'Discussion not found' });
     }
 
-    // Filter out removed comments
-    const activeComments = discussion.comments.filter(comment => comment.status === 'active');
-    res.json(activeComments);
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Comment content is required' });
+    }
+
+    // Find the user by phone number to get their name and profile picture
+    let authorName = 'Anonymous';
+    let authorProfilePicture = null;
+    
+    if (author && author !== 'Anonymous') {
+      try {
+        const user = await User.findOne({ phone: author });
+        if (user) {
+          authorName = `${user.username}`.trim();
+          authorProfilePicture = user.profilePic;
+        }
+      } catch (userError) {
+        console.error('Error finding user for comment author:', userError);
+        authorName = 'Anonymous';
+      }
+    }
+
+    const newComment = {
+      content: content.trim(),
+      author: authorName, // Use the actual username instead of phone
+      authorPhone: author, // Store phone separately if needed
+      authorProfilePicture,
+      createdAt: new Date(),
+      status: 'active'
+    };
+
+    discussion.comments.push(newComment);
+    await discussion.save();
+
+    // AWARD POINTS FOR COMMENTING
+    if (author !== 'Anonymous') {
+      await awardPoints(author, 'COMMENT_ADDED', discussion.location);
+    }
+
+    // CREATE NOTIFICATION for post author
+    if (discussion.authorPhone !== author && discussion.authorPhone !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.authorPhone, // Use authorPhone for notification
+        author,
+        'comment_added',
+        discussion.title,
+        discussion._id
+      );
+    }
+
+    // Return the newly added comment
+    const addedComment = discussion.comments[discussion.comments.length - 1];
+    res.status(201).json(addedComment);
   } catch (error) {
-    console.error('Error fetching comments:', error);
-    res.status(500).json({ message: 'Error fetching comments' });
+    console.error('Error adding comment:', error);
+    res.status(500).json({ message: 'Error adding comment' });
   }
 });
 
@@ -746,8 +827,8 @@ router.patch('/:discussionId/comments/:commentId', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { author } = req.body;
-    
+    const { author, authorPhone } = req.body;
+
     console.log('DELETE request received:', { id, author });
     
     if (!isValidObjectId(id)) {
@@ -765,7 +846,7 @@ router.delete('/:id', async (req, res) => {
     console.log('Request author:', author);
 
     // Check exact match for author
-    if (discussion.author.trim() !== author.trim()) {
+    if (discussion.authorPhone !== authorPhone) {
       return res.status(403).json({ 
         message: 'You can only delete your own posts',
         discussionAuthor: discussion.author,
