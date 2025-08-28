@@ -243,8 +243,8 @@ const PostDetail = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           content: newComment.trim(),
-          author: getCurrentUserPhone(),
-          authorUsername: getCurrentUser()
+          author: getCurrentUserPhone(), // Send phone number to backend
+          // Remove authorUsername - backend will resolve the display name
         }),
       });
 
@@ -259,7 +259,8 @@ const PostDetail = () => {
           comments: [...(prev.comments || []), addedComment]
         }));
       } else {
-        Alert.alert('Error', 'Failed to add comment');
+        const errorData = await response.json().catch(() => ({}));
+        Alert.alert('Error', errorData.message || 'Failed to add comment');
       }
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -696,7 +697,10 @@ const PostDetail = () => {
           )}
         </View>
         
-        {post.helpNeeded && (
+        {/* Only show help button if: it's a high/urgent priority report, help is needed, and it's not your own post */}
+        {post.helpNeeded && 
+        (post.priority === 'high' || post.priority === 'urgent') &&
+        post.authorPhone !== currentUserPhone && ( // <- ADD THIS CHECK
           <Pressable
             style={[styles.actionButton, userIsHelping && styles.actionButtonActive]}
             onPress={handleOfferHelp}
@@ -752,7 +756,7 @@ const PostDetail = () => {
         />
         <View style={styles.commentInfo}>
           <Text style={styles.commentAuthor}>
-            {comment.authorUsername || 'Anonymous'}
+            {comment.author || 'Anonymous'}
           </Text>
           <Text style={styles.commentTime}>
             {formatTimeAgo(comment.createdAt)}

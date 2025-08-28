@@ -944,28 +944,31 @@ const CommunityHome = () => {
                       </View>
                       
                       <View style={styles.actionButtons}>
-                        {/* Special Help button for Reports with high priority */}
-                        {discussion.type === 'Report' && (discussion.priority === 'high' || discussion.priority === 'urgent') && (() => {
-                          const currentUserName = getCurrentUser();
-                          const userIsHelping = discussion.helpers?.some(h => h.username === currentUserName);
-                          
-                          return (
-                            <Pressable
-                              style={[
-                                styles.helpButton,
-                                userIsHelping && styles.helpButtonActive
-                              ]}
-                              onPress={() => handleOfferHelp(discussion._id)}
-                            >
-                              <Text style={[
-                                styles.helpButtonText,
-                                userIsHelping && styles.helpButtonTextActive
-                              ]}>
-                                {userIsHelping ? '✓ Helping' : '🆘 Help'}
-                              </Text>
-                            </Pressable>
-                          );
-                        })()}
+                      {/* Special Help button for Reports with high priority - but NOT for your own posts */}
+                      {discussion.type === 'Report' && 
+                      (discussion.priority === 'high' || discussion.priority === 'urgent') && 
+                      discussion.authorPhone !== getCurrentUser() && // <- ADD THIS CHECK
+                      (() => {
+                        const currentUserPhone = getCurrentUser();
+                        const userIsHelping = discussion.helpers?.some(h => h.username === currentUserPhone);
+                        
+                        return (
+                          <Pressable
+                            style={[
+                              styles.helpButton,
+                              userIsHelping && styles.helpButtonActive
+                            ]}
+                            onPress={() => handleOfferHelp(discussion._id)}
+                          >
+                            <Text style={[
+                              styles.helpButtonText,
+                              userIsHelping && styles.helpButtonTextActive
+                            ]}>
+                              {userIsHelping ? '✓ Helping' : '🆘 Help'}
+                            </Text>
+                          </Pressable>
+                        );
+                      })()}
                         
                         <Pressable
                           style={[

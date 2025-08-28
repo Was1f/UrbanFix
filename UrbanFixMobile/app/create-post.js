@@ -62,7 +62,7 @@ export default function CreatePost() {
     { value: 'Report', label: 'Report Issue', emoji: '⚠️', description: 'Report community problems' },
     { value: 'Poll', label: 'Create Poll', emoji: '📊', description: 'Get community opinions' },
     { value: 'Event', label: 'Organize Event', emoji: '📅', description: 'Plan community events' },
-    { value: 'Donation', label: 'Fundraise', emoji: '💝', description: 'Raise funds for causes' },
+    { value: 'Donation', label: 'Fundraise', emoji: '💰', description: 'Raise funds for causes' },
     { value: 'Volunteer', label: 'Find Volunteers', emoji: '🤝', description: 'Recruit helpers' },
   ];
 
@@ -149,6 +149,8 @@ export default function CreatePost() {
   };
 
   const handleMediaPicker = async (type) => {
+    console.log(`Media picker called with type: ${type}`);
+    
     try {
       let result;
       
@@ -163,21 +165,27 @@ export default function CreatePost() {
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
           aspect: [16, 9],
-          quality: 0.7, // Reduced quality for smaller file size
+          quality: 0.7,
         });
       } else if (type === 'video') {
+        console.log('Requesting media library permissions for video...');
         const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        
         if (permissionResult.granted === false) {
+          console.log('Permission denied for media library');
           Alert.alert('Permission Required', 'Permission to access media library is required!');
           return;
         }
 
+        console.log('Permission granted, launching video picker...');
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Videos,
           allowsEditing: true,
-          quality: 0.5, // Lower quality for smaller file size
-          videoMaxDuration: 30, // Reduced duration to 30 seconds
+          quality: 0.5,
+          videoMaxDuration: 30,
         });
+
+        console.log('Video picker result:', result);
       } else if (type === 'audio') {
         result = await DocumentPicker.getDocumentAsync({
           type: 'audio/*',
@@ -185,24 +193,33 @@ export default function CreatePost() {
         });
       }
 
+      console.log(`Full result object for ${type}:`, JSON.stringify(result, null, 2));
+
       if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
+        console.log(`Selected ${type} asset:`, asset);
         
         // Check file size (10MB limit)
         if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+          console.log('File too large:', asset.fileSize);
           Alert.alert('File Too Large', 'Please select a file smaller than 10MB');
           return;
         }
         
-        setSelectedMedia({
+        const mediaObject = {
           ...asset,
-          // Ensure proper file extension and type
           name: asset.fileName || `${type}_${Date.now()}.${getFileExtension(asset.uri, type)}`,
           type: getMimeType(asset.uri, type)
-        });
+        };
+
+        console.log(`Setting selected media for ${type}:`, mediaObject);
+        setSelectedMedia(mediaObject);
         setMediaType(type);
+        
+        console.log('State updated - selectedMedia and mediaType set');
       } else if (result.type === 'success') {
         // For DocumentPicker (audio)
+        console.log('Document picker success:', result);
         if (result.size && result.size > 10 * 1024 * 1024) {
           Alert.alert('File Too Large', 'Please select a file smaller than 10MB');
           return;
@@ -214,9 +231,11 @@ export default function CreatePost() {
           type: getMimeType(result.uri, 'audio')
         });
         setMediaType(type);
+      } else {
+        console.log('Media selection cancelled or failed');
       }
     } catch (error) {
-      console.error('Error picking media:', error);
+      console.error('Error in handleMediaPicker:', error);
       Alert.alert('Error', 'Failed to pick media');
     }
   };
@@ -277,8 +296,8 @@ export default function CreatePost() {
       setSelectedMedia({
         uri,
         name: `recording_${Date.now()}.m4a`,
-        type: 'audio/mp4', // Proper MIME type for .m4a files
-        fileSize: null // We'll let the server handle size validation
+        type: 'audio/mp4',
+        fileSize: null
       });
       setMediaType('audio');
       setRecording(undefined);
@@ -289,6 +308,7 @@ export default function CreatePost() {
   };
 
   const handleRemoveMedia = () => {
+    console.log('Removing selected media');
     setSelectedMedia(null);
     setMediaType(null);
   };
@@ -365,19 +385,26 @@ export default function CreatePost() {
 
     try {
       setIsUploading(true);
+      console.log('Starting upload process...');
+      console.log('Selected media:', selectedMedia);
+      console.log('Media type:', mediaType);
 
       let uploadedMediaUrl = '';
 
       if (selectedMedia) {
         try {
-          console.log('Uploading media:', {
+          console.log('Starting media upload...');
+          console.log('Media details:', {
             name: selectedMedia.name,
             type: selectedMedia.type,
-            size: selectedMedia.fileSize
+            size: selectedMedia.fileSize,
+            uri: selectedMedia.uri
           });
 
           const response = await fetch(selectedMedia.uri);
           const blob = await response.blob();
+          
+          console.log('Blob created, size:', blob.size);
           
           // Check blob size
           if (blob.size > 10 * 1024 * 1024) {
@@ -386,7 +413,10 @@ export default function CreatePost() {
           
           const base64Promise = new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
+            reader.onloadend = () => {
+              console.log('Base64 conversion complete');
+              resolve(reader.result);
+            };
             reader.onerror = reject;
             reader.readAsDataURL(blob);
           });
@@ -401,7 +431,8 @@ export default function CreatePost() {
             mediaType: mediaType
           };
 
-          console.log('Upload payload size:', JSON.stringify(uploadPayload).length);
+          console.log('Sending upload request...');
+          console.log('Payload size:', JSON.stringify(uploadPayload).length);
           
           const uploadResponse = await fetch(url, {
             method: 'POST',
@@ -456,6 +487,8 @@ export default function CreatePost() {
         ...(uploadedMediaUrl && mediaType === 'audio' && { audio: uploadedMediaUrl }),
       };
 
+      console.log('Post data being sent:', postData);
+
       // Type-specific data
       if (type === 'Poll') {
         const validOptions = [...new Set(pollOptions.map(o => o.trim()).filter(Boolean))];
@@ -508,26 +541,55 @@ export default function CreatePost() {
   };
 
   const renderMediaPreview = () => {
-    if (!selectedMedia) return null;
+    console.log('renderMediaPreview called');
+    console.log('selectedMedia:', selectedMedia);
+    console.log('mediaType:', mediaType);
+    
+    if (!selectedMedia) {
+      console.log('No selectedMedia, returning null');
+      return null;
+    }
 
     switch (mediaType) {
       case 'image':
+        console.log('Rendering image preview');
         return (
           <View style={styles.mediaContainer}>
             <Image source={{ uri: selectedMedia.uri }} style={styles.mediaPreview} />
-            <Text style={styles.mediaInfo}>Image selected</Text>
+            <Text style={styles.mediaInfo}>Image selected: {selectedMedia.name}</Text>
           </View>
         );
+        
       case 'video':
+        console.log('Rendering video preview with URI:', selectedMedia.uri);
         return (
           <View style={styles.mediaContainer}>
-            <View style={styles.videoPlaceholder}>
-              <Text style={styles.videoPlaceholderIcon}>🎥</Text>
-              <Text style={styles.mediaInfo}>Video selected</Text>
+            <View style={styles.videoPreviewContainer}>
+              <View style={styles.videoPlaceholder}>
+                <Text style={styles.videoPlaceholderIcon}>🎥</Text>
+                <Text style={styles.videoPlaceholderText}>Video Ready</Text>
+              </View>
+              <View style={styles.videoInfoContainer}>
+                <Text style={styles.mediaInfo}>
+                  Video selected: {selectedMedia.name || 'video.mp4'}
+                </Text>
+                {selectedMedia.duration && (
+                  <Text style={styles.videoDuration}>
+                    Duration: {Math.round(selectedMedia.duration / 1000)}s
+                  </Text>
+                )}
+                {selectedMedia.fileSize && (
+                  <Text style={styles.videoFileSize}>
+                    Size: {(selectedMedia.fileSize / (1024 * 1024)).toFixed(2)} MB
+                  </Text>
+                )}
+              </View>
             </View>
           </View>
         );
+        
       case 'audio':
+        console.log('Rendering audio preview');
         return (
           <View style={styles.mediaContainer}>
             <View style={styles.audioPlaceholder}>
@@ -538,7 +600,9 @@ export default function CreatePost() {
             </View>
           </View>
         );
+        
       default:
+        console.log('Unknown media type:', mediaType);
         return null;
     }
   };
@@ -660,7 +724,7 @@ export default function CreatePost() {
       case 'Donation':
         return (
           <View style={styles.typeSpecificSection}>
-            <Text style={styles.sectionTitle}>💝 Fundraising Campaign</Text>
+            <Text style={styles.sectionTitle}>💰 Fundraising Campaign</Text>
             <Text style={styles.sectionSubtitle}>Set your funding goals</Text>
             
             <TextInput
@@ -1186,17 +1250,44 @@ const styles = StyleSheet.create({
     height: 200,
     backgroundColor: '#f3f4f6',
   },
-  videoPlaceholder: {
+  
+  // Fixed Video Preview Styles
+  videoPreviewContainer: {
     backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  videoPlaceholder: {
+    backgroundColor: '#e2e8f0',
     height: 120,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
+    marginBottom: 12,
   },
   videoPlaceholderIcon: {
     fontSize: 32,
     marginBottom: 8,
   },
+  videoPlaceholderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  videoInfoContainer: {
+    padding: 12,
+  },
+  videoDuration: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 4,
+  },
+  videoFileSize: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  
   audioPlaceholder: {
     backgroundColor: '#f8fafc',
     height: 80,
