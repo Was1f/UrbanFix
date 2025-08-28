@@ -1,4 +1,4 @@
-// notificationService.js - Fixed to show usernames instead of phone numbers
+// notificationService.js - Complete version with cleanup methods
 
 const Notification = require('../models/Notification');
 const User = require('../models/User');
@@ -206,6 +206,99 @@ class NotificationService {
     } catch (error) {
       console.error('Error creating bulk notifications:', error);
       return null;
+    }
+  }
+
+  /**
+   * Clean up old notifications (older than 30 days by default)
+   * @param {number} daysOld - Number of days to keep notifications (default: 30)
+   */
+  static async cleanupOldNotifications(daysOld = 30) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+      
+      const result = await Notification.deleteMany({
+        createdAt: { $lt: cutoffDate }
+      });
+      
+      console.log(`Cleaned up ${result.deletedCount} old notifications older than ${daysOld} days`);
+      return result;
+    } catch (error) {
+      console.error('Error cleaning up old notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up read notifications older than specified days
+   * @param {number} daysOld - Number of days to keep read notifications (default: 7)
+   */
+  static async cleanupReadNotifications(daysOld = 7) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+      
+      const result = await Notification.deleteMany({
+        isRead: true,
+        createdAt: { $lt: cutoffDate }
+      });
+      
+      console.log(`Cleaned up ${result.deletedCount} read notifications older than ${daysOld} days`);
+      return result;
+    } catch (error) {
+      console.error('Error cleaning up read notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get notification cleanup statistics
+   */
+  static async getCleanupStats() {
+    try {
+      const total = await Notification.countDocuments();
+      const read = await Notification.countDocuments({ isRead: true });
+      const unread = await Notification.countDocuments({ isRead: false });
+      
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const old = await Notification.countDocuments({
+        createdAt: { $lt: thirtyDaysAgo }
+      });
+
+      return {
+        total,
+        read,
+        unread,
+        oldNotifications: old
+      };
+    } catch (error) {
+      console.error('Error getting cleanup stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check for leaderboard changes and notify users
+   * @param {string} period - 'daily', 'weekly', or 'monthly'
+   */
+  static async checkLeaderboardChanges(period = 'weekly') {
+    try {
+      // This would typically compare current rankings with previous rankings
+      // For now, it's a placeholder that could be implemented based on your leaderboard logic
+      console.log(`Checking ${period} leaderboard changes...`);
+      
+      // Example implementation - you would need to implement this based on your leaderboard system
+      // const topUsers = await getTopUsers(period, 10);
+      // for (const user of topUsers) {
+      //   await this.notifyLeaderboardRank(user.phone, user.rank, period, user.points);
+      // }
+      
+      return { success: true, period };
+    } catch (error) {
+      console.error('Error checking leaderboard changes:', error);
+      throw error;
     }
   }
 }

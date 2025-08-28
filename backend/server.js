@@ -65,6 +65,15 @@ const scheduleLeaderboardCheck = () => {
       await NotificationService.checkLeaderboardChanges('weekly');
     }
   }, 60 * 60 * 1000); // Check every hour
+
+  // Clean up old notifications daily at 2 AM
+  setInterval(async () => {
+    const now = new Date();
+    if (now.getHours() === 2) {
+      console.log('Cleaning up old notifications...');
+      await NotificationService.cleanupOldNotifications();
+    }
+  }, 60 * 60 * 1000); // Check every hour
 };
 
 // ===== Health check endpoint =====
