@@ -33,32 +33,49 @@ export default function UserHomepage() {
   const announcementFlatListRef = useRef(null);
   const [lastAnnouncementCheck, setLastAnnouncementCheck] = useState(null);
   const [isComponentMounted, setIsComponentMounted] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   // Mark component as mounted
   useEffect(() => {
     setIsComponentMounted(true);
   }, []);
 
+  // Load notification count
+  const loadNotificationCount = async () => {
+    if (!user) return;
+    
+    try {
+      const userIdentifier = user.phone || user.username;
+      const response = await fetch(
+        apiUrl(`/api/notifications/unread-count?user=${userIdentifier}`)
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setUnreadNotificationCount(data.unreadCount || 0);
+      }
+    } catch (error) {
+      console.error('Error loading notification count:', error);
+    }
+  };
+
   // Authentication check that only runs after component is mounted
   useEffect(() => {
     if (!isComponentMounted) return;
     
     const checkAuthOnMount = async () => {
-      console.log('🔒 [UserHomepage] Checking authentication on mount...');
+      console.log('🔍 [UserHomepage] Checking authentication on mount...');
       
       // Check if user exists
       if (!user) {
-        console.log('🔒 [UserHomepage] No user found, redirecting to login');
-        // Instead of navigating immediately, set a flag and let the component handle it
-        // This avoids the navigation timing issue
+        console.log('🔍 [UserHomepage] No user found, redirecting to login');
         return;
       }
 
       // Check if session is valid
       const isValid = await checkSessionValidity();
       if (!isValid) {
-        console.log('🔒 [UserHomepage] Session invalid, redirecting to login');
-        // checkSessionValidity will handle logout and routing
+        console.log('🔍 [UserHomepage] Session invalid, redirecting to login');
         return;
       }
 
@@ -66,16 +83,14 @@ export default function UserHomepage() {
     };
 
     checkAuthOnMount();
-  }, [isComponentMounted, user, checkSessionValidity, router]); // Dependencies include isComponentMounted
+  }, [isComponentMounted, user, checkSessionValidity, router]);
 
   // Watch for user state changes (like logout)
   useEffect(() => {
     if (!isComponentMounted) return;
     
     if (!user) {
-      console.log('🔒 [UserHomepage] User state changed to null, redirecting to login');
-      // Instead of navigating immediately, set a flag and let the component handle it
-      // This avoids the navigation timing issue
+      console.log('🔍 [UserHomepage] User state changed to null, redirecting to login');
     }
   }, [isComponentMounted, user, router]);
 
@@ -83,13 +98,12 @@ export default function UserHomepage() {
   useEffect(() => {
     if (!isComponentMounted || user) return;
     
-    // Wait a bit longer to ensure navigation is ready
     const timer = setTimeout(() => {
       try {
-        console.log('🔒 [UserHomepage] Now attempting navigation to login...');
+        console.log('🔍 [UserHomepage] Now attempting navigation to login...');
         router.replace('/PhoneLogin');
       } catch (error) {
-        console.error('🔒 [UserHomepage] Navigation failed:', error);
+        console.error('🔍 [UserHomepage] Navigation failed:', error);
       }
     }, 500);
     
@@ -130,13 +144,16 @@ export default function UserHomepage() {
       }
     };
 
-    loadData();
-    loadAnnouncementsInitial();
+    if (user) {
+      loadData();
+      loadAnnouncementsInitial();
+      loadNotificationCount();
+    }
     
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user]);
 
   // Use focus effect to check session validity and new announcements when returning to this screen
   useFocusEffect(
@@ -146,12 +163,14 @@ export default function UserHomepage() {
         const isSessionValid = await checkSessionValidity();
         if (!isSessionValid) {
           console.log('🔄 Session expired in user homepage, logout will handle routing');
-          // logout method will handle both session clearing and routing to login
           return;
         }
 
         // Refresh session timestamp to keep it active
         await SessionManager.refreshUserSession();
+
+        // Reload notification count when screen comes into focus
+        await loadNotificationCount();
 
         // Load announcements if this isn't the first load
         if (lastAnnouncementCheck) {
@@ -178,13 +197,16 @@ export default function UserHomepage() {
         if (newAnnouncementsSinceLastCheck.length > 0) {
           const latestAnnouncement = newAnnouncementsSinceLastCheck[0];
           Alert.alert(
-            '🔔 New Announcement',
+            '📢 New Announcement',
             `${latestAnnouncement.title}`,
             [
               { text: 'View', onPress: () => router.push('/announcements-list') },
               { text: 'Dismiss', style: 'cancel' }
             ]
           );
+          
+          // Reload notification count as user might have new announcement notification
+          await loadNotificationCount();
         }
       }
       
@@ -194,6 +216,10 @@ export default function UserHomepage() {
       console.warn('Failed to load announcements:', e);
       setAnnouncements([]);
     }
+  };
+
+  const handleNotificationPress = () => {
+    router.push('/notifications');
   };
 
   const getDefaultImageForType = (type) => {
@@ -287,8 +313,21 @@ export default function UserHomepage() {
           </View>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Urban Fix</Text>
-        <Pressable style={styles.headerRight} accessibilityRole="button" onPress={() => {}}>
-          <Ionicons name="notifications-outline" size={22} color="#000" />
+        <Pressable 
+          style={styles.headerRight} 
+          accessibilityRole="button" 
+          onPress={handleNotificationPress}
+        >
+          <View style={styles.notificationIconContainer}>
+            <Ionicons name="notifications-outline" size={22} color="#000" />
+            {unreadNotificationCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                </Text>
+              </View>
+            )}
+          </View>
         </Pressable>
       </View>
 
@@ -297,7 +336,7 @@ export default function UserHomepage() {
         {user && (
           <View style={styles.greetingSection}>
             <Text style={styles.greetingText}>
-              Hello, {user.fname || 'User'}! 👋
+              Hello, {user.fname || 'User'}!
             </Text>
             <Text style={styles.greetingSubtext}>
               Welcome back to UrbanFix
@@ -408,7 +447,7 @@ export default function UserHomepage() {
             <View key={idx} style={styles.communityCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.communityTitle} numberOfLines={1}>
-                  {loading ? 'Loading…' : item.title || 'Untitled'}
+                  {loading ? 'Loading...' : item.title || 'Untitled'}
                 </Text>
                 <Text style={styles.communitySubtitle} numberOfLines={2}>
                   {loading ? ' ' : item.description || ' '}
@@ -477,6 +516,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#fff',
+  },
+  notificationIconContainer: {
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
   },
 
   greetingSection: {
@@ -628,5 +687,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-
-

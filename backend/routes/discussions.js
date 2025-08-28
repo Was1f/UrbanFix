@@ -4,6 +4,7 @@ const Discussion = require('../models/Discussion');
 const Board = require('../models/Board');
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const NotificationService = require('../services/notificationService'); // Add this import
 
 // Helper function to validate ObjectId
 const isValidObjectId = (id) => {
@@ -225,6 +226,17 @@ router.post('/:id/like', async (req, res) => {
       if (username !== 'Anonymous') {
         await awardPoints(username, 'POST_LIKED', discussion.location);
       }
+
+      // CREATE NOTIFICATION for post author
+      if (discussion.author !== username && discussion.author !== 'Anonymous') {
+        await NotificationService.notifyPostInteraction(
+          discussion.author,
+          username,
+          'post_liked',
+          discussion.title,
+          discussion._id
+        );
+      }
     }
     
     discussion.likeCount = discussion.likes.length;
@@ -279,6 +291,17 @@ router.post('/:id/vote', async (req, res) => {
       await awardPoints(username, 'POLL_VOTED', discussion.location);
     }
 
+    // CREATE NOTIFICATION for poll author (only if first vote)
+    if (!hasVotedBefore && discussion.author !== username && discussion.author !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.author,
+        username,
+        'poll_voted',
+        discussion.title,
+        discussion._id
+      );
+    }
+
     res.json(discussion);
   } catch (error) {
     console.error('Error voting:', error);
@@ -325,6 +348,18 @@ router.post('/:id/rsvp', async (req, res) => {
     if (!alreadySignedUp && username !== 'Anonymous') {
       const action = discussion.type === 'Event' ? 'EVENT_RSVP' : 'VOLUNTEER_SIGNUP';
       await awardPoints(username, action, discussion.location);
+    }
+
+    // CREATE NOTIFICATION for post author (only if new signup)
+    if (!alreadySignedUp && discussion.author !== username && discussion.author !== 'Anonymous') {
+      const notificationType = discussion.type === 'Event' ? 'event_rsvp' : 'volunteer_signup';
+      await NotificationService.notifyPostInteraction(
+        discussion.author,
+        username,
+        notificationType,
+        discussion.title,
+        discussion._id
+      );
     }
 
     res.json(discussion);
@@ -402,6 +437,17 @@ router.post('/:id/donate', async (req, res) => {
     if (username !== 'Anonymous') {
       await awardPoints(username, 'DONATION_MADE', discussion.location);
     }
+
+    // CREATE NOTIFICATION for post author
+    if (discussion.author !== username && discussion.author !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.author,
+        username,
+        'donation_made',
+        discussion.title,
+        discussion._id
+      );
+    }
     
     res.json(discussion);
   } catch (error) {
@@ -445,6 +491,17 @@ router.post('/:id/offer-help', async (req, res) => {
     // AWARD POINTS FOR OFFERING HELP
     if (username !== 'Anonymous') {
       await awardPoints(username, 'HELP_OFFERED', discussion.location);
+    }
+
+    // CREATE NOTIFICATION for report author
+    if (discussion.author !== username && discussion.author !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.author,
+        username,
+        'help_offered',
+        discussion.title,
+        discussion._id
+      );
     }
 
     res.json(discussion);
@@ -514,6 +571,18 @@ router.patch('/:id/helper/:helperId/status', async (req, res) => {
 
     helper.status = status;
     await discussion.save();
+
+    // CREATE NOTIFICATION for helper about status change
+    if (helper.username !== authorUsername && helper.username !== 'Anonymous') {
+      await NotificationService.notifyHelpStatusChange(
+        authorUsername,
+        helper.username,
+        status,
+        discussion.title,
+        discussion._id,
+        helperId
+      );
+    }
 
     res.json(discussion);
   } catch (error) {
@@ -587,6 +656,17 @@ router.post('/:id/comments', async (req, res) => {
     // AWARD POINTS FOR COMMENTING
     if (author !== 'Anonymous') {
       await awardPoints(author, 'COMMENT_ADDED', discussion.location);
+    }
+
+    // CREATE NOTIFICATION for post author
+    if (discussion.author !== author && discussion.author !== 'Anonymous') {
+      await NotificationService.notifyPostInteraction(
+        discussion.author,
+        author,
+        'comment_added',
+        discussion.title,
+        discussion._id
+      );
     }
 
     // Return the newly added comment
@@ -663,7 +743,6 @@ router.patch('/:discussionId/comments/:commentId', async (req, res) => {
 });
 
 // Delete discussion (only by author)
-// Make sure your route is properly defined
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -709,4 +788,5 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: 'Error deleting discussion' });
   }
 });
+
 module.exports = router;
