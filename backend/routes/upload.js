@@ -10,10 +10,11 @@ const uploadDir = path.join(__dirname, '../uploads');
 const communityDir = path.join(uploadDir, 'community');
 const appointmentDir = path.join(uploadDir, 'appointment');
 const profileDir = path.join(uploadDir, 'profile'); // New profile pictures directory
+const ticketsDir = path.join(uploadDir, 'tickets'); // New tickets directory
 const audioDir = path.join(communityDir, 'audio');
 const videoDir = path.join(communityDir, 'video');
 
-[uploadDir, communityDir, appointmentDir, profileDir, audioDir, videoDir].forEach(dir => {
+[uploadDir, communityDir, appointmentDir, profileDir, ticketsDir, audioDir, videoDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -37,6 +38,9 @@ const storage = multer.diskStorage({
           break;
         case 'appointment':
           destDir = appointmentDir;
+          break;
+        case 'ticket':
+          destDir = ticketsDir;
           break;
         default:
           destDir = communityDir;
@@ -169,23 +173,27 @@ router.post('/base64', async (req, res) => {
     let destDir;
     let urlPrefix;
     
-    switch (type) {
-      case 'profile':
-        destDir = profileDir;
-        urlPrefix = '/uploads/profile';
-        break;
-      case 'community':
-        destDir = communityDir;
-        urlPrefix = '/uploads/community';
-        break;
-      case 'appointment':
-        destDir = appointmentDir;
-        urlPrefix = '/uploads/appointment';
-        break;
-      default:
-        destDir = uploadDir;
-        urlPrefix = '/uploads';
-    }
+         switch (type) {
+       case 'profile':
+         destDir = profileDir;
+         urlPrefix = '/uploads/profile';
+         break;
+       case 'community':
+         destDir = communityDir;
+         urlPrefix = '/uploads/community';
+         break;
+       case 'appointment':
+         destDir = appointmentDir;
+         urlPrefix = '/uploads/appointment';
+         break;
+       case 'ticket':
+         destDir = ticketsDir;
+         urlPrefix = '/uploads/tickets';
+         break;
+       default:
+         destDir = uploadDir;
+         urlPrefix = '/uploads';
+     }
     
     // Convert base64 to buffer and save file
     const imageBuffer = Buffer.from(base64Data, 'base64');
@@ -611,6 +619,17 @@ router.get('/community/video/:filename', (req, res) => {
 router.get('/appointment/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(appointmentDir, filename);
+  
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).json({ message: 'File not found' });
+  }
+});
+
+router.get('/tickets/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(ticketsDir, filename);
   
   if (fs.existsSync(filePath)) {
     res.sendFile(filePath);

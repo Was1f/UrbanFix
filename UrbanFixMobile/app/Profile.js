@@ -53,7 +53,6 @@ export default function Profile({ navigation }) {
           updateUser(res.data); // update context
         }
       } catch (err) {
-        console.error('Error fetching user:', err.message);
         if (isActive) {
           // fallback to previous context data, don't overwrite with empty/bad data
           updateUser(loggedInUser);
@@ -69,15 +68,13 @@ export default function Profile({ navigation }) {
   if (!loggedInUser) return <Text style={{ textAlign: 'center', marginTop: 20 }}>User not found</Text>;
 
   const handleLogout = async () => {
-    try {
-      setShowLogoutModal(false);
-      await logout();
-      // Navigation to login page is handled automatically by the logout method
-      console.log('✅ User logged out successfully');
-    } catch (error) {
-      console.error('❌ Error during logout:', error);
-      Alert.alert('Logout Error', 'Failed to logout properly. Please try again.');
-    }
+          try {
+        setShowLogoutModal(false);
+        await logout();
+        // Navigation to login page is handled automatically by the logout method
+      } catch (error) {
+        Alert.alert('Logout Error', 'Failed to logout properly. Please try again.');
+      }
   };
 
   return (
@@ -175,6 +172,25 @@ export default function Profile({ navigation }) {
         >
           <Text style={{ fontWeight: '600', color: 'white', fontSize: 16 }}>Edit Profile</Text>
         </TouchableOpacity>
+
+        {/* Ticket Inbox Link */}
+        <TouchableOpacity
+          style={styles.ticketBtn}
+          onPress={() => {
+            if (navigation?.navigate) {
+              navigation.navigate('ticket-inbox');
+            } else if (router?.push) {
+              router.push('/ticket-inbox');
+            } else if (typeof window !== 'undefined') {
+              window.location.href = '/ticket-inbox';
+            }
+          }}
+        >
+          <Ionicons name="mail-outline" size={20} color="white" style={{ marginRight: 8 }} />
+          <Text style={{ fontWeight: '600', color: 'white', fontSize: 16 }}>Support Tickets</Text>
+        </TouchableOpacity>
+
+
       </ScrollView>
 
       {/* Logout Modal */}
@@ -337,6 +353,22 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     minWidth: 140,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  ticketBtn: {
+    backgroundColor: '#6b48ff',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginVertical: 8,
+    alignSelf: 'center',
+    minWidth: 180,
+    alignItems: 'center',
+    flexDirection: 'row',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

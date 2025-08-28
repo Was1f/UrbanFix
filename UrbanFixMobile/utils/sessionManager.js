@@ -100,6 +100,33 @@ class SessionManager {
     return session !== null;
   }
 
+  // Debug function to check session status
+  static async debugAdminSession() {
+    try {
+      const [token, username, role, timestamp] = await AsyncStorage.multiGet([
+        SESSION_KEYS.ADMIN_TOKEN,
+        SESSION_KEYS.ADMIN_USERNAME,
+        SESSION_KEYS.ADMIN_ROLE,
+        SESSION_KEYS.SESSION_TIMESTAMP,
+      ]);
+      
+      const sessionAge = timestamp[1] ? Date.now() - parseInt(timestamp[1]) : 0;
+      const isExpired = sessionAge > SESSION_TIMEOUT;
+      
+      return {
+        token: token[1] ? 'Present' : 'Missing',
+        username: username[1] || 'N/A',
+        role: role[1] || 'N/A',
+        timestamp: timestamp[1] ? new Date(parseInt(timestamp[1])).toLocaleString() : 'N/A',
+        sessionAge: `${Math.round(sessionAge / 1000 / 60)} minutes`,
+        isExpired,
+        SESSION_TIMEOUT: `${Math.round(SESSION_TIMEOUT / 1000 / 60 / 60)} hours`
+      };
+    } catch (error) {
+      return { error: error.message };
+    }
+  }
+
   // Clear admin session
   static async clearAdminSession() {
     try {

@@ -33,7 +33,7 @@ export default function AdminCreateAnnouncement() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showDateModal, setShowDateModal] = useState(false);
-  const [tempDate, setTempDate] = useState(formData.expirationDate);
+  const [dateInputText, setDateInputText] = useState('');
 
   const announcementTypes = [
     'Power Outage',
@@ -190,19 +190,117 @@ export default function AdminCreateAnnouncement() {
     }
   };
 
-  const formatDateForInput = (date) => {
-    return date.toISOString().split('T')[0]; // YYYY-MM-DD format
+  const formatDateForDisplay = (date) => {
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
   };
 
-  const handleDateChange = (dateString) => {
-    try {
-      const newDate = new Date(dateString);
-      if (!isNaN(newDate.getTime())) {
-        setFormData(prev => ({ ...prev, expirationDate: newDate }));
+  const openDateModal = () => {
+    setDateInputText(formData.expirationDate.toLocaleDateString('en-CA'));
+    setShowDateModal(true);
+  };
+
+  const closeDateModal = () => {
+    setShowDateModal(false);
+  };
+
+  const handleDateInputChange = (text) => {
+    // Only allow digits and dashes
+    if (/^[\d-]*$/.test(text)) {
+      setDateInputText(text);
+      
+      // Auto-format as user types
+      if (text.length === 4 && !text.includes('-')) {
+        setDateInputText(text + '-');
+      } else if (text.length === 7 && text.split('-').length === 2) {
+        setDateInputText(text + '-');
       }
-    } catch (error) {
-      console.warn('Invalid date format');
     }
+  };
+
+  const confirmDate = () => {
+    // Parse the date from the input text
+    try {
+      const newDate = new Date(dateInputText);
+      
+      // Validate the date
+      if (isNaN(newDate.getTime())) {
+        Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format.');
+        return;
+      }
+      
+      if (newDate <= new Date()) {
+        Alert.alert('Invalid Date', 'Please select a future date for the expiration.');
+        return;
+      }
+      
+      setFormData(prev => ({ ...prev, expirationDate: newDate }));
+      closeDateModal();
+      
+    } catch (error) {
+      Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format.');
+    }
+  };
+
+  const renderDatePicker = () => {
+    return (
+      <Modal
+        visible={showDateModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={closeDateModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Expiration Date</Text>
+              <TouchableOpacity onPress={closeDateModal}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.datePickerContainer}>
+              <Text style={styles.datePickerLabel}>
+                Enter a future date when this announcement should expire:
+              </Text>
+              
+              <View style={styles.dateInputRow}>
+                <Text style={styles.dateInputLabel}>Date:</Text>
+                <TextInput
+                  style={styles.dateInput}
+                  value={dateInputText}
+                  onChangeText={handleDateInputChange}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                  maxLength={10}
+                />
+              </View>
+              
+              <Text style={styles.selectedDateText}>
+                Current: {formatDateForDisplay(formData.expirationDate)}
+              </Text>
+              
+              <Text style={styles.dateHelpText}>
+                Enter date in YYYY-MM-DD format (e.g., 2024-12-31). Only future dates are allowed.
+              </Text>
+            </View>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelButton} onPress={closeDateModal}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmButton} onPress={confirmDate}>
+                <Text style={styles.confirmButtonText}>Confirm Date</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   return (
@@ -305,15 +403,17 @@ export default function AdminCreateAnnouncement() {
           {/* Expiration Date */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Expiration Date *</Text>
-            <TextInput
-              style={styles.textInput}
-              value={formatDateForInput(formData.expirationDate)}
-              onChangeText={handleDateChange}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#9ca3af"
-            />
+            <TouchableOpacity style={styles.datePickerButton} onPress={openDateModal}>
+              <View style={styles.datePickerContent}>
+                <Ionicons name="calendar-outline" size={20} color="#6b7280" />
+                <Text style={styles.datePickerText}>
+                  {formatDateForDisplay(formData.expirationDate)}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color="#6b7280" />
+              </View>
+            </TouchableOpacity>
             <Text style={styles.helpText}>
-              Enter date in YYYY-MM-DD format (e.g., 2024-12-31). After this date, the announcement will be automatically archived.
+              Tap to select when this announcement should expire. Only future dates are allowed.
             </Text>
           </View>
 
@@ -340,6 +440,9 @@ export default function AdminCreateAnnouncement() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Date Picker Modal */}
+      {renderDatePicker()}
     </SafeAreaView>
   );
 }
@@ -474,5 +577,149 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9ca3af',
     marginTop: 4,
+  },
+  // New styles for date picker
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111',
+  },
+  datePickerContainer: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  datePickerLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111',
+    marginBottom: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  dateInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    justifyContent: 'center',
+  },
+  dateInputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111',
+    marginRight: 15,
+  },
+  dateInput: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#111',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    width: 140,
+    textAlign: 'center',
+  },
+  selectedDateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3b82f6',
+    marginBottom: 15,
+    textAlign: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    width: '100%',
+  },
+  dateHelpText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 20,
+  },
+  cancelButton: {
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    flex: 1,
+    alignItems: 'center',
+    marginRight: 7,
+  },
+  cancelButtonText: {
+    color: '#374151',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: 'center',
+    marginLeft: 7,
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  datePickerButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  datePickerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  datePickerText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111',
+    marginHorizontal: 10,
+    flex: 1,
+    textAlign: 'center',
   },
 });

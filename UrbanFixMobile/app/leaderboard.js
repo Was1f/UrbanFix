@@ -290,7 +290,7 @@ const Leaderboard = () => {
         <View style={styles.header}>
           <Pressable
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.push('/user-homepage')}
           >
             <Text style={styles.backIcon}>←</Text>
           </Pressable>

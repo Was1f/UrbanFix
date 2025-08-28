@@ -7,12 +7,17 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
+  Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import SessionManager from '../utils/sessionManager';
 import ProtectedRoute from '../components/ProtectedRoute';
 import { apiUrl } from '../constants/api';
+
+const { width } = Dimensions.get('window');
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -141,104 +146,79 @@ export default function AdminDashboard() {
     if (loading) {
       return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1e90ff" />
+          <ActivityIndicator size="large" color="#6366f1" />
           <Text style={styles.loadingText}>Loading dashboard...</Text>
         </View>
       );
     }
 
     return (
-      <ScrollView style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Admin Dashboard</Text>
-          <TouchableOpacity 
-            style={styles.logoutButton} 
-            onPress={handleLogout}
-          >
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Statistics Cards */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats?.totalReports || 0}</Text>
-            <Text style={styles.statLabel}>Total Reports</Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>Admin Dashboard</Text>
+            <Text style={styles.headerSubtitle}>Welcome back, {session?.username || 'Admin'}! 👋</Text>
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats?.pendingReports || 0}</Text>
-            <Text style={styles.statLabel}>Pending Reports</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats?.flaggedDiscussions || 0}</Text>
-            <Text style={styles.statLabel}>Flagged Posts</Text>
-          </View>
-        </View>
-
-        {/* Recent Reports */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Reports</Text>
+          <View style={styles.headerActions}>
             <TouchableOpacity 
-              style={styles.viewAllButton}
-              onPress={() => {
-                if (session?.token) {
-                  router.push('/moderation-panel');
-                } else {
-                  Alert.alert('Authentication Required', 'Please login again to access this feature.', [
-                    { text: 'OK', onPress: () => router.replace('/admin-login') }
-                  ]);
-                }
+              style={styles.infoButton}
+              onPress={async () => {
+                const debugInfo = await SessionManager.debugAdminSession();
+                Alert.alert('Session Debug Info', 
+                  `Token: ${debugInfo.token}\n` +
+                  `Username: ${debugInfo.username}\n` +
+                  `Role: ${debugInfo.role}\n` +
+                  `Timestamp: ${debugInfo.timestamp}\n` +
+                  `Session Age: ${debugInfo.sessionAge}\n` +
+                  `Is Expired: ${debugInfo.isExpired}\n` +
+                  `Timeout: ${debugInfo.SESSION_TIMEOUT}`
+                );
               }}
             >
-              <Text style={styles.viewAllButtonText}>View All</Text>
+              <Ionicons name="information-circle-outline" size={20} color="#6366f1" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.logoutButton} 
+              onPress={handleLogout}
+            >
+              <Ionicons name="log-out-outline" size={18} color="#ef4444" />
             </TouchableOpacity>
           </View>
+        </View>
 
-          {reports.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No reports to review</Text>
-            </View>
-          ) : (
-            reports.map((report) => (
-              <View key={report._id} style={styles.reportCard}>
-                <View style={styles.reportHeader}>
-                  <Text style={styles.reportReason}>{report.reason}</Text>
-                  <Text style={styles.reportTime}>
-                    {new Date(report.createdAt).toLocaleDateString()}
-                  </Text>
-                </View>
-                <Text style={styles.reportTitle}>
-                  {report.discussionId?.title || 'Unknown Discussion'}
-                </Text>
-                <Text style={styles.reportAuthor}>
-                  By {report.discussionId?.author || 'Anonymous'}
-                </Text>
-                <TouchableOpacity 
-                  style={styles.reviewButton}
-                  onPress={() => {
-                    if (session?.token) {
-                      router.push(`/moderation-panel?reportId=${report._id}`);
-                    } else {
-                      Alert.alert('Authentication Required', 'Please login again to access this feature.', [
-                        { text: 'OK', onPress: () => router.replace('/admin-login') }
-                      ]);
-                    }
-                  }}
-                >
-                  <Text style={styles.reviewButtonText}>Review</Text>
-                </TouchableOpacity>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Statistics Cards */}
+          <Text style={styles.sectionHeading}>Overview</Text>
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="document-text-outline" size={24} color="#6366f1" />
               </View>
-            ))
-          )}
-        </View>
+              <Text style={styles.statNumber}>{stats?.totalReports || 0}</Text>
+              <Text style={styles.statLabel}>Total Reports</Text>
+            </View>
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="time-outline" size={24} color="#f59e0b" />
+              </View>
+              <Text style={styles.statNumber}>{stats?.pendingReports || 0}</Text>
+              <Text style={styles.statLabel}>Pending</Text>
+            </View>
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="flag-outline" size={24} color="#ef4444" />
+              </View>
+              <Text style={styles.statNumber}>{stats?.flaggedDiscussions || 0}</Text>
+              <Text style={styles.statLabel}>Flagged Posts</Text>
+            </View>
+          </View>
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionButtons}>
+          {/* Quick Actions */}
+          <Text style={styles.sectionHeading}>Quick Actions</Text>
+          <View style={styles.quickGrid}>
             <TouchableOpacity 
-              style={styles.actionButton}
+              style={styles.quickButton}
               onPress={() => {
                 if (session?.token) {
                   router.push('/moderation-panel');
@@ -249,10 +229,11 @@ export default function AdminDashboard() {
                 }
               }}
             >
-              <Text style={styles.actionButtonText}>Moderation Panel</Text>
+              <Ionicons name="shield-checkmark-outline" size={20} color="#6366f1" />
+              <Text style={styles.quickLabel}>Moderation Panel</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={styles.actionButton}
+              style={styles.quickButton}
               onPress={() => {
                 if (session?.token) {
                   router.push('/admin-announcements');
@@ -263,10 +244,11 @@ export default function AdminDashboard() {
                 }
               }}
             >
-              <Text style={styles.actionButtonText}>Manage Announcements</Text>
+              <Ionicons name="megaphone-outline" size={20} color="#10b981" />
+              <Text style={styles.quickLabel}>Announcements</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={styles.actionButton}
+              style={styles.quickButton}
               onPress={() => {
                 if (session?.token) {
                   router.push('/admin-users');
@@ -277,11 +259,92 @@ export default function AdminDashboard() {
                 }
               }}
             >
-              <Text style={styles.actionButtonText}>Manage Users</Text>
+              <Ionicons name="people-outline" size={20} color="#8b5cf6" />
+              <Text style={styles.quickLabel}>Manage Users</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.quickButton}
+              onPress={() => {
+                if (session?.token) {
+                  router.push('/admin-tickets');
+                } else {
+                  Alert.alert('Authentication Required', 'Please login again to access this feature.', [
+                    { text: 'OK', onPress: () => router.replace('/admin-login') }
+                  ]);
+                }
+              }}
+            >
+              <Ionicons name="ticket-outline" size={20} color="#f97316" />
+              <Text style={styles.quickLabel}>Support Tickets</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </ScrollView>
+
+          {/* Recent Reports */}
+          <Text style={styles.sectionHeading}>Recent Reports</Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionSubtitle}>Latest reports requiring attention</Text>
+              <TouchableOpacity 
+                style={styles.viewAllButton}
+                onPress={() => {
+                  if (session?.token) {
+                    router.push('/moderation-panel');
+                  } else {
+                    Alert.alert('Authentication Required', 'Please login again to access this feature.', [
+                      { text: 'OK', onPress: () => router.replace('/admin-login') }
+                    ]);
+                  }
+                }}
+              >
+                <Text style={styles.viewAllButtonText}>View All</Text>
+              </TouchableOpacity>
+            </View>
+
+            {reports.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="checkmark-circle-outline" size={48} color="#10b981" />
+                <Text style={styles.emptyStateTitle}>All caught up!</Text>
+                <Text style={styles.emptyStateText}>No reports to review at the moment.</Text>
+              </View>
+            ) : (
+              <View style={styles.reportsList}>
+                {reports.map((report) => (
+                  <View key={report._id} style={styles.reportCard}>
+                    <View style={styles.reportHeader}>
+                      <View style={styles.reportBadge}>
+                        <Text style={styles.reportBadgeText}>{report.reason}</Text>
+                      </View>
+                      <Text style={styles.reportTime}>
+                        {new Date(report.createdAt).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <Text style={styles.reportTitle}>
+                      {report.discussionId?.title || 'Unknown Discussion'}
+                    </Text>
+                    <Text style={styles.reportAuthor}>
+                      By {report.discussionId?.author || 'Anonymous'}
+                    </Text>
+                    <TouchableOpacity 
+                      style={styles.reviewButton}
+                      onPress={() => {
+                        if (session?.token) {
+                          router.push(`/moderation-panel?reportId=${report._id}`);
+                        } else {
+                          Alert.alert('Authentication Required', 'Please login again to access this feature.', [
+                            { text: 'OK', onPress: () => router.replace('/admin-login') }
+                          ]);
+                        }
+                      }}
+                    >
+                      <Text style={styles.reviewButtonText}>Review Report</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     );
   };
 
@@ -301,162 +364,231 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f9f9f9',
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#6b7280',
+    fontWeight: '500',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'white',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e5e7eb',
   },
-  title: {
+  headerLeft: {
+    flex: 1,
+  },
+  headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '400',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  infoButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   logoutButton: {
-    backgroundColor: '#ff4444',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
+    width: 40,
+    height: 40,
     borderRadius: 20,
+    backgroundColor: '#fef2f2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  logoutButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+  content: {
+    flex: 1,
+  },
+  sectionHeading: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    paddingHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 12,
   },
   statsContainer: {
     flexDirection: 'row',
-    padding: 20,
-    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   statCard: {
     flex: 1,
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 10,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginRight: 8,
+  },
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   statNumber: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1e90ff',
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 5,
+    color: '#6b7280',
+    fontWeight: '500',
+    textAlign: 'center',
   },
-  section: {
-    padding: 20,
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  quickButton: {
+    width: '48%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+    marginBottom: 8,
+    marginRight: '2%',
+  },
+  quickLabel: {
+    fontWeight: '600',
+    color: '#111827',
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  sectionContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '400',
   },
   viewAllButton: {
-    backgroundColor: '#1e90ff',
-    paddingHorizontal: 15,
-    paddingVertical: 5,
-    borderRadius: 15,
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   viewAllButtonText: {
-    color: 'white',
+    color: '#fff',
     fontSize: 12,
     fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',
-    padding: 40,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 16,
+    marginBottom: 8,
   },
   emptyStateText: {
-    color: '#666',
-    fontSize: 16,
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  reportsList: {
+    gap: 12,
   },
   reportCard: {
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   reportHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  reportReason: {
-    backgroundColor: '#ffefef',
-    color: '#c00',
-    paddingHorizontal: 8,
+  reportBadge: {
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    fontSize: 12,
+  },
+  reportBadgeText: {
+    color: '#dc2626',
+    fontSize: 11,
     fontWeight: '600',
+    textTransform: 'uppercase',
   },
   reportTime: {
     fontSize: 12,
-    color: '#666',
+    color: '#6b7280',
+    fontWeight: '500',
   },
   reportTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+    color: '#111827',
+    marginBottom: 6,
+    lineHeight: 22,
   },
   reportAuthor: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 10,
+    color: '#6b7280',
+    marginBottom: 16,
   },
   reviewButton: {
-    backgroundColor: '#1e90ff',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 5,
+    backgroundColor: '#6366f1',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     alignSelf: 'flex-start',
   },
   reviewButtonText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  actionButtons: {
-    gap: 10,
-  },
-  actionButton: {
-    backgroundColor: '#1e90ff',
-    paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    color: 'white',
-    fontSize: 16,
+    color: '#fff',
+    fontSize: 13,
     fontWeight: '600',
   },
 });

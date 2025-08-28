@@ -10,7 +10,9 @@ import {
   TextInput,
   Modal,
   FlatList,
+  SafeAreaView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import SessionManager from '../utils/sessionManager';
@@ -99,36 +101,25 @@ export default function AdminUsers() {
         setTotalPages(data.pagination.totalPages);
         setCurrentPage(page);
       } else if (response.status === 401) {
+        // Token expired or invalid
         await handleSessionExpired();
         return;
-      } else {
-        Alert.alert('Error', 'Failed to load users');
       }
     } catch (error) {
       console.error('Error fetching users:', error);
       Alert.alert('Error', 'Failed to load users');
     } finally {
       setLoading(false);
-      setFilterLoading(false);
     }
   };
 
   useFocusEffect(
     React.useCallback(() => {
       if (session?.token) {
-        fetchUsers(session.token, 1, true);
+        fetchUsers(session.token);
       }
     }, [session?.token])
   );
-
-  // Separate effect for filters to avoid infinite loops
-  useEffect(() => {
-    if (session?.token) {
-      setCurrentPage(1);
-      setFilterLoading(true);
-      fetchUsers(session.token, 1, true);
-    }
-  }, [searchQuery, locationFilter, banStatusFilter]);
 
   const handleSessionExpired = async () => {
     console.log('⚠️ Session expired, clearing and redirecting');
@@ -139,29 +130,26 @@ export default function AdminUsers() {
   };
 
   const handleSearch = () => {
-    setCurrentPage(1);
-    fetchUsers(session.token, 1, true);
+    if (session?.token) {
+      setCurrentPage(1);
+      fetchUsers(session.token, 1, true);
+    }
   };
 
   const handleLoadMore = () => {
-    if (currentPage < totalPages && !loading) {
-      fetchUsers(session.token, currentPage + 1, false);
+    if (currentPage < totalPages && session?.token && !loading) {
+      fetchUsers(session.token, currentPage + 1);
     }
   };
 
   const handleBanUser = async () => {
-    if (!banReason.trim()) {
+    if (!selectedUser || !banReason.trim()) {
       Alert.alert('Error', 'Please provide a ban reason');
       return;
     }
 
-    if (banType === 'temporary' && !banExpiryDate) {
-      Alert.alert('Error', 'Please select an expiry date for temporary ban');
-      return;
-    }
-
-    setBanLoading(true);
     try {
+      setBanLoading(true);
       const response = await fetch(apiUrl(`/api/admin/users/${selectedUser._id}/ban`), {
         method: 'POST',
         headers: {
@@ -170,21 +158,23 @@ export default function AdminUsers() {
         },
         body: JSON.stringify({
           reason: banReason,
-          banType,
+          type: banType,
           expiryDate: banType === 'temporary' ? banExpiryDate : null
         }),
       });
 
       if (response.ok) {
-        const data = await response.json();
-        Alert.alert('Success', data.message);
-        setBanModalVisible(false);
-        setBanReason('');
-        setBanType('permanent');
-        setBanExpiryDate('');
-        setSelectedUser(null);
-        // Refresh users list
-        fetchUsers(session.token, 1, true);
+        Alert.alert('Success', 'User has been banned successfully', [
+          { text: 'OK', onPress: () => {
+            setBanModalVisible(false);
+            setBanReason('');
+            setSelectedUser(null);
+            // Refresh users list
+            if (session?.token) {
+              fetchUsers(session.token, 1, true);
+            }
+          }}
+        ]);
       } else {
         const errorData = await response.json();
         Alert.alert('Error', errorData.message || 'Failed to ban user');
@@ -200,8 +190,8 @@ export default function AdminUsers() {
   const handleUnbanUser = async (userId) => {
     Alert.alert('Unban User', 'Are you sure you want to unban this user?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Unban',
+      { 
+        text: 'Unban', 
         style: 'destructive',
         onPress: async () => {
           try {
@@ -214,10 +204,14 @@ export default function AdminUsers() {
             });
 
             if (response.ok) {
-              const data = await response.json();
-              Alert.alert('Success', data.message);
-              // Refresh users list
-              fetchUsers(session.token, 1, true);
+              Alert.alert('Success', 'User has been unbanned successfully', [
+                { text: 'OK', onPress: () => {
+                  // Refresh users list
+                  if (session?.token) {
+                    fetchUsers(session.token, 1, true);
+                  }
+                }}
+              ]);
             } else {
               const errorData = await response.json();
               Alert.alert('Error', errorData.message || 'Failed to unban user');
@@ -231,69 +225,58 @@ export default function AdminUsers() {
     ]);
   };
 
-  const renderUserCard = ({ item: user }) => (
+  const renderUserCard = ({ item }) => (
     <View style={styles.userCard}>
       <View style={styles.userHeader}>
         <View style={styles.userInfo}>
-          <Text style={styles.username}>{user.username}</Text>
-          <Text style={styles.email}>{user.email}</Text>
-          <Text style={styles.location}>{user.location}</Text>
+          <Text style={styles.userName}>
+            {item.fname} {item.lname}
+          </Text>
+          <Text style={styles.userPhone}>{item.phone}</Text>
+          <Text style={styles.userLocation}>{item.location || 'No location'}</Text>
         </View>
         <View style={styles.userStatus}>
-          {user.isBanned ? (
+          {item.isBanned ? (
             <View style={styles.bannedBadge}>
-              <Text style={styles.bannedText}>BANNED</Text>
+              <Ionicons name="ban-outline" size={16} color="#dc2626" />
+              <Text style={styles.bannedText}>Banned</Text>
             </View>
           ) : (
             <View style={styles.activeBadge}>
-              <Text style={styles.activeText}>ACTIVE</Text>
+              <Ionicons name="checkmark-circle-outline" size={16} color="#10b981" />
+              <Text style={styles.activeText}>Active</Text>
             </View>
           )}
         </View>
       </View>
       
-      <View style={styles.userDetails}>
-        <Text style={styles.userName}>{user.fname} {user.lname}</Text>
-        <Text style={styles.joinDate}>Joined: {new Date(user.createdAt).toLocaleDateString()}</Text>
-        
-        {user.isBanned && (
-          <View style={styles.banInfo}>
-            <Text style={styles.banReason}>Reason: {user.banReason}</Text>
-            <Text style={styles.banDate}>Banned: {new Date(user.banDate).toLocaleDateString()}</Text>
-            {user.banExpiryDate && (
-              <Text style={styles.banExpiry}>Expires: {new Date(user.banExpiryDate).toLocaleDateString()}</Text>
-            )}
-          </View>
-        )}
-      </View>
-
       <View style={styles.userActions}>
         <TouchableOpacity 
-          style={styles.viewButton}
-          onPress={() => {
-            // Navigate to user detail view
-            router.push(`/admin-user-detail?userId=${user._id}`);
-          }}
+          style={styles.actionButton}
+          onPress={() => router.push(`/admin-user-detail?userId=${item._id}`)}
         >
-          <Text style={styles.viewButtonText}>View Details</Text>
+          <Ionicons name="eye-outline" size={16} color="#6366f1" />
+          <Text style={styles.actionButtonText}>View Details</Text>
         </TouchableOpacity>
         
-        {user.isBanned ? (
+        {item.isBanned ? (
           <TouchableOpacity 
-            style={styles.unbanButton}
-            onPress={() => handleUnbanUser(user._id)}
+            style={[styles.actionButton, styles.unbanButton]}
+            onPress={() => handleUnbanUser(item._id)}
           >
-            <Text style={styles.unbanButtonText}>Unban</Text>
+            <Ionicons name="checkmark-outline" size={16} color="#10b981" />
+            <Text style={[styles.actionButtonText, styles.unbanButtonText]}>Unban</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 
-            style={styles.banButton}
+            style={[styles.actionButton, styles.banButton]}
             onPress={() => {
-              setSelectedUser(user);
+              setSelectedUser(item);
               setBanModalVisible(true);
             }}
           >
-            <Text style={styles.banButtonText}>Ban</Text>
+            <Ionicons name="ban-outline" size={16} color="#dc2626" />
+            <Text style={[styles.actionButtonText, styles.banButtonText]}>Ban</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -303,84 +286,98 @@ export default function AdminUsers() {
   const BanModal = () => (
     <Modal
       visible={banModalVisible}
-      animationType="slide"
       transparent={true}
+      animationType="slide"
       onRequestClose={() => setBanModalVisible(false)}
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Ban User: {selectedUser?.username}</Text>
-          
-          <Text style={styles.modalLabel}>Ban Type:</Text>
-          <View style={styles.banTypeContainer}>
-            <TouchableOpacity
-              style={[
-                styles.banTypeButton,
-                banType === 'permanent' && styles.banTypeButtonActive
-              ]}
-              onPress={() => setBanType('permanent')}
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Ban User</Text>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setBanModalVisible(false)}
             >
-              <Text style={[
-                styles.banTypeButtonText,
-                banType === 'permanent' && styles.banTypeButtonTextActive
-              ]}>Permanent</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.banTypeButton,
-                banType === 'temporary' && styles.banTypeButtonActive
-              ]}
-              onPress={() => setBanType('temporary')}
-            >
-              <Text style={[
-                styles.banTypeButtonText,
-                banType === 'temporary' && styles.banTypeButtonTextActive
-              ]}>Temporary</Text>
+              <Ionicons name="close" size={24} color="#6b7280" />
             </TouchableOpacity>
           </View>
-
+          
+          <Text style={styles.modalSubtitle}>
+            Banning: {selectedUser?.fname} {selectedUser?.lname}
+          </Text>
+          
+          <View style={styles.modalSection}>
+            <Text style={styles.modalLabel}>Ban Type</Text>
+            <View style={styles.banTypeContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.banTypeButton,
+                  banType === 'permanent' && styles.banTypeButtonActive
+                ]}
+                onPress={() => setBanType('permanent')}
+              >
+                <Text style={[
+                  styles.banTypeButtonText,
+                  banType === 'permanent' && styles.banTypeButtonTextActive
+                ]}>
+                  Permanent
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.banTypeButton,
+                  banType === 'temporary' && styles.banTypeButtonActive
+                ]}
+                onPress={() => setBanType('temporary')}
+              >
+                <Text style={[
+                  styles.banTypeButtonText,
+                  banType === 'temporary' && styles.banTypeButtonTextActive
+                ]}>
+                  Temporary
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          
           {banType === 'temporary' && (
-            <>
-              <Text style={styles.modalLabel}>Expiry Date:</Text>
+            <View style={styles.modalSection}>
+              <Text style={styles.modalLabel}>Expiry Date</Text>
               <TextInput
                 style={styles.dateInput}
                 placeholder="YYYY-MM-DD"
                 value={banExpiryDate}
                 onChangeText={setBanExpiryDate}
               />
-            </>
+            </View>
           )}
-
-          <Text style={styles.modalLabel}>Ban Reason:</Text>
-          <TextInput
-            style={styles.reasonInput}
-            placeholder="Enter ban reason..."
-            value={banReason}
-            onChangeText={setBanReason}
-            multiline
-            numberOfLines={3}
-          />
-
+          
+          <View style={styles.modalSection}>
+            <Text style={styles.modalLabel}>Ban Reason *</Text>
+            <TextInput
+              style={styles.reasonInput}
+              placeholder="Enter reason for banning this user..."
+              value={banReason}
+              onChangeText={setBanReason}
+              multiline
+              numberOfLines={3}
+            />
+          </View>
+          
           <View style={styles.modalActions}>
-            <TouchableOpacity
+            <TouchableOpacity 
               style={styles.cancelButton}
-              onPress={() => {
-                setBanModalVisible(false);
-                setBanReason('');
-                setBanType('permanent');
-                setBanExpiryDate('');
-                setSelectedUser(null);
-              }}
+              onPress={() => setBanModalVisible(false)}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity 
               style={styles.confirmButton}
               onPress={handleBanUser}
               disabled={banLoading}
             >
               {banLoading ? (
-                <ActivityIndicator size="small" color="white" />
+                <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.confirmButtonText}>Ban User</Text>
               )}
@@ -394,7 +391,7 @@ export default function AdminUsers() {
   if (loading && users.length === 0) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1e90ff" />
+        <ActivityIndicator size="large" color="#6366f1" />
         <Text style={styles.loadingText}>Loading users...</Text>
       </View>
     );
@@ -402,67 +399,78 @@ export default function AdminUsers() {
 
   return (
     <ProtectedRoute>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>← Back</Text>
+            <Ionicons name="arrow-back-outline" size={24} color="#6366f1" />
           </TouchableOpacity>
-          <Text style={styles.title}>Manage Users</Text>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Manage Users</Text>
+            <Text style={styles.headerSubtitle}>User administration and moderation</Text>
+          </View>
           <View style={styles.headerSpacer} />
         </View>
 
-                        {/* Search and Filters */}
-                <View style={styles.searchContainer}>
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search users..."
-                    value={searchQuery}
-                    onChangeText={(text) => {
-                      setSearchQuery(text);
-                      // Clear existing timeout
-                      if (searchTimeout) {
-                        clearTimeout(searchTimeout);
-                      }
-                      // Set new timeout for debounced search
-                      const newTimeout = setTimeout(() => {
-                        if (session?.token) {
-                          setCurrentPage(1);
-                          fetchUsers(session.token, 1, true);
-                        }
-                      }, 500); // 500ms delay
-                      setSearchTimeout(newTimeout);
-                    }}
-                    onSubmitEditing={handleSearch}
-                  />
-                  
-                  {/* Active Filters Indicator */}
-                  {(searchQuery || locationFilter || banStatusFilter) && (
-                    <View style={styles.activeFiltersIndicator}>
-                      <Text style={styles.activeFiltersText}>
-                        Active Filters: 
-                        {searchQuery && ` Search: "${searchQuery}"`}
-                        {locationFilter && ` Location: "${locationFilter}"`}
-                        {banStatusFilter && ` Status: "${banStatusFilter === 'banned' ? 'Banned' : 'Active'}"`}
-                      </Text>
-                      {filterLoading && (
-                        <View style={styles.filterLoadingIndicator}>
-                          <ActivityIndicator size="small" color="#2196f3" />
-                          <Text style={styles.filterLoadingText}>Applying filters...</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                  
-                  <View style={styles.filtersRow}>
+        {/* Search and Filters */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <Ionicons name="search-outline" size={20} color="#6b7280" style={styles.searchIcon} />
             <TextInput
-              style={styles.filterInput}
-              placeholder="Filter by location..."
-              value={locationFilter}
-              onChangeText={setLocationFilter}
+              style={styles.searchInput}
+              placeholder="Search users by name, phone, or location..."
+              value={searchQuery}
+              onChangeText={(text) => {
+                setSearchQuery(text);
+                // Clear existing timeout
+                if (searchTimeout) {
+                  clearTimeout(searchTimeout);
+                }
+                // Set new timeout for debounced search
+                const newTimeout = setTimeout(() => {
+                  if (session?.token) {
+                    setCurrentPage(1);
+                    fetchUsers(session.token, 1, true);
+                  }
+                }, 500); // 500ms delay
+                setSearchTimeout(newTimeout);
+              }}
+              onSubmitEditing={handleSearch}
             />
+          </View>
+          
+          {/* Active Filters Indicator */}
+          {(searchQuery || locationFilter || banStatusFilter) && (
+            <View style={styles.activeFiltersIndicator}>
+              <Ionicons name="filter-outline" size={16} color="#6366f1" />
+              <Text style={styles.activeFiltersText}>
+                Active Filters: 
+                {searchQuery && ` Search: "${searchQuery}"`}
+                {locationFilter && ` Location: "${locationFilter}"`}
+                {banStatusFilter && ` Status: "${banStatusFilter === 'banned' ? 'Banned' : 'Active'}"`}
+              </Text>
+              {filterLoading && (
+                <View style={styles.filterLoadingIndicator}>
+                  <ActivityIndicator size="small" color="#6366f1" />
+                  <Text style={styles.filterLoadingText}>Applying filters...</Text>
+                </View>
+              )}
+            </View>
+          )}
+          
+          <View style={styles.filtersRow}>
+            <View style={styles.filterInputContainer}>
+              <Ionicons name="location-outline" size={16} color="#6b7280" style={styles.filterIcon} />
+              <TextInput
+                style={styles.filterInput}
+                placeholder="Filter by location..."
+                value={locationFilter}
+                onChangeText={setLocationFilter}
+              />
+            </View>
             
             <TouchableOpacity
               style={[
@@ -477,11 +485,16 @@ export default function AdminUsers() {
                 }
               }}
             >
+              <Ionicons 
+                name={banStatusFilter === 'banned' ? "ban" : "ban-outline"} 
+                size={16} 
+                color={banStatusFilter === 'banned' ? "#fff" : "#dc2626"} 
+              />
               <Text style={[
                 styles.filterButtonText,
                 banStatusFilter === 'banned' && styles.filterButtonTextActive
               ]}>
-                {banStatusFilter === 'banned' ? 'Banned ✓' : 'Banned'}
+                {banStatusFilter === 'banned' ? 'Banned' : 'Banned'}
               </Text>
             </TouchableOpacity>
             
@@ -498,24 +511,30 @@ export default function AdminUsers() {
                 }
               }}
             >
+              <Ionicons 
+                name={banStatusFilter === 'unbanned' ? "checkmark-circle" : "checkmark-circle-outline"} 
+                size={16} 
+                color={banStatusFilter === 'unbanned' ? "#fff" : "#10b981"} 
+              />
               <Text style={[
                 styles.filterButtonText,
                 banStatusFilter === 'unbanned' && styles.filterButtonTextActive
               ]}>
-                {banStatusFilter === 'unbanned' ? 'Active ✓' : 'Active'}
+                {banStatusFilter === 'unbanned' ? 'Active' : 'Active'}
               </Text>
             </TouchableOpacity>
             
             {(searchQuery || locationFilter || banStatusFilter) && (
               <TouchableOpacity
-                style={[styles.filterButton, styles.clearFilterButton]}
+                style={styles.clearFilterButton}
                 onPress={() => {
                   setSearchQuery('');
                   setLocationFilter('');
                   setBanStatusFilter('');
                 }}
               >
-                <Text style={styles.clearFilterButtonText}>Clear All</Text>
+                <Ionicons name="close-circle-outline" size={16} color="#6b7280" />
+                <Text style={styles.clearFilterButtonText}>Clear</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -527,12 +546,13 @@ export default function AdminUsers() {
           renderItem={renderUserCard}
           keyExtractor={(item) => item._id}
           style={styles.usersList}
+          contentContainerStyle={styles.usersListContent}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.1}
           ListFooterComponent={
             currentPage < totalPages ? (
               <View style={styles.loadMoreContainer}>
-                <ActivityIndicator size="small" color="#1e90ff" />
+                <ActivityIndicator size="small" color="#6366f1" />
                 <Text style={styles.loadMoreText}>Loading more users...</Text>
               </View>
             ) : null
@@ -540,7 +560,7 @@ export default function AdminUsers() {
         />
 
         <BanModal />
-      </View>
+      </SafeAreaView>
     </ProtectedRoute>
   );
 }
@@ -554,261 +574,277 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f9f9f9',
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#6b7280',
+    fontWeight: '500',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e5e7eb',
   },
   backButton: {
-    padding: 5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  backButtonText: {
-    fontSize: 16,
-    color: '#1e90ff',
-  },
-  title: {
+  headerCenter: {
     flex: 1,
+    alignItems: 'center',
+  },
+  headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '400',
   },
   headerSpacer: {
-    width: 50,
+    width: 40,
   },
   searchContainer: {
-    padding: 20,
-    backgroundColor: 'white',
+    padding: 16,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e5e7eb',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 16,
+  },
+  searchIcon: {
+    marginLeft: 12,
+    marginRight: 8,
   },
   searchInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     fontSize: 16,
-    marginBottom: 15,
+    color: '#111827',
   },
   activeFiltersIndicator: {
-    backgroundColor: '#e3f2fd',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
     borderLeftWidth: 4,
-    borderLeftColor: '#2196f3',
-    padding: 10,
-    borderRadius: 6,
-    marginBottom: 15,
+    borderLeftColor: '#6366f1',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
   },
   activeFiltersText: {
     fontSize: 14,
-    color: '#1976d2',
+    color: '#1e40af',
     fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
   },
   filterLoadingIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8,
-    gap: 8,
   },
   filterLoadingText: {
     fontSize: 12,
-    color: '#1976d2',
+    color: '#1e40af',
     fontStyle: 'italic',
+    marginLeft: 8,
   },
   filtersRow: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  filterIcon: {
+    marginLeft: 10,
+    marginRight: 8,
   },
   filterInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     fontSize: 14,
+    color: '#111827',
   },
   filterButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: 'white',
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    gap: 6,
   },
   filterButtonActive: {
-    backgroundColor: '#1e90ff',
-    borderColor: '#1e90ff',
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
   },
   filterButtonText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
   },
   filterButtonTextActive: {
-    color: 'white',
+    color: '#fff',
   },
   clearFilterButton: {
-    backgroundColor: '#6c757d',
-    borderColor: '#6c757d',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    gap: 6,
   },
   clearFilterButtonText: {
-    color: 'white',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
+    color: '#6b7280',
   },
   usersList: {
     flex: 1,
   },
+  usersListContent: {
+    padding: 16,
+  },
   userCard: {
-    backgroundColor: 'white',
-    margin: 10,
-    padding: 15,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   userHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 16,
   },
   userInfo: {
     flex: 1,
   },
-  username: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 2,
-  },
-  email: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 2,
-  },
-  location: {
-    fontSize: 12,
-    color: '#999',
-  },
-  userStatus: {
-    marginLeft: 10,
-  },
-  bannedBadge: {
-    backgroundColor: '#ff4444',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  bannedText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  activeBadge: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  activeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  userDetails: {
-    marginBottom: 15,
-  },
   userName: {
     fontSize: 16,
-    color: '#333',
-    marginBottom: 5,
-  },
-  joinDate: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 10,
-  },
-  banInfo: {
-    backgroundColor: '#fff3cd',
-    padding: 10,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#ffc107',
-  },
-  banReason: {
-    fontSize: 14,
-    color: '#856404',
     fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  userPhone: {
+    fontSize: 14,
+    color: '#6b7280',
     marginBottom: 2,
   },
-  banDate: {
+  userLocation: {
     fontSize: 12,
-    color: '#856404',
-    marginBottom: 2,
+    color: '#9ca3af',
+    fontWeight: '500',
   },
-  banExpiry: {
-    fontSize: 12,
-    color: '#856404',
+  userStatus: {
+    alignItems: 'flex-end',
+  },
+  bannedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  bannedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#dc2626',
+    textTransform: 'uppercase',
+  },
+  activeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  activeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#10b981',
+    textTransform: 'uppercase',
   },
   userActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
-  viewButton: {
-    flex: 1,
-    backgroundColor: '#1e90ff',
-    paddingVertical: 10,
-    borderRadius: 8,
+  actionButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    gap: 6,
   },
-  viewButtonText: {
-    color: 'white',
-    fontSize: 14,
+  actionButtonText: {
+    fontSize: 12,
     fontWeight: '600',
+    color: '#374151',
   },
   banButton: {
-    flex: 1,
-    backgroundColor: '#ff4444',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
+    backgroundColor: '#fef2f2',
   },
   banButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#dc2626',
   },
   unbanButton: {
-    flex: 1,
-    backgroundColor: '#4CAF50',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
   },
   unbanButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#10b981',
   },
   loadMoreContainer: {
-    padding: 20,
     alignItems: 'center',
+    paddingVertical: 20,
   },
   loadMoreText: {
-    marginTop: 10,
+    marginTop: 8,
     fontSize: 14,
-    color: '#666',
+    color: '#6b7280',
   },
   modalOverlay: {
     flex: 1,
@@ -817,92 +853,117 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 15,
+    backgroundColor: '#fff',
+    borderRadius: 16,
     padding: 20,
     width: '90%',
     maxWidth: 400,
   },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: '#111827',
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
     marginBottom: 20,
-    textAlign: 'center',
+  },
+  modalSection: {
+    marginBottom: 20,
   },
   modalLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#374151',
     marginBottom: 8,
-    marginTop: 15,
   },
   banTypeContainer: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   banTypeButton: {
     flex: 1,
     paddingVertical: 10,
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
     alignItems: 'center',
   },
   banTypeButtonActive: {
-    backgroundColor: '#1e90ff',
-    borderColor: '#1e90ff',
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
   },
   banTypeButtonText: {
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
+    color: '#374151',
   },
   banTypeButtonTextActive: {
-    color: 'white',
+    color: '#fff',
   },
   dateInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e5e7eb',
     borderRadius: 8,
     padding: 12,
-    fontSize: 16,
+    fontSize: 14,
+    backgroundColor: '#f9fafb',
   },
   reasonInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e5e7eb',
     borderRadius: 8,
     padding: 12,
-    fontSize: 16,
+    fontSize: 14,
+    backgroundColor: '#f9fafb',
     textAlignVertical: 'top',
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 15,
-    marginTop: 25,
+    gap: 12,
+    marginTop: 8,
   },
   cancelButton: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
     alignItems: 'center',
   },
   cancelButtonText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
   },
   confirmButton: {
     flex: 1,
-    backgroundColor: '#ff4444',
     paddingVertical: 12,
     borderRadius: 8,
+    backgroundColor: '#dc2626',
     alignItems: 'center',
   },
   confirmButtonText: {
-    fontSize: 16,
-    color: 'white',
+    fontSize: 14,
     fontWeight: '600',
+    color: '#fff',
   },
 });

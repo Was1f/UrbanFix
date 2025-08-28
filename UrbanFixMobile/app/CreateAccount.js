@@ -1,11 +1,10 @@
 // app/CreateAccount.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Modal, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Modal } from 'react-native';
 import axios from 'axios';
 import { useRouter } from 'expo-router';
 import { apiUrl } from '../constants/api';
 import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function CreateAccount() {
   const router = useRouter();
@@ -24,6 +23,7 @@ export default function CreateAccount() {
   const [showGenderDropdown, setShowGenderDropdown] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [birthdayInputText, setBirthdayInputText] = useState('');
 
   // Available options
   const [locations, setLocations] = useState([]);
@@ -221,10 +221,58 @@ export default function CreateAccount() {
   // ----------------------------
   // Date picker functions
   // ----------------------------
-  const handleDateChange = (event, selectedDate) => {
+  const openBirthdayModal = () => {
+    setBirthdayInputText(formData.dob.toLocaleDateString('en-CA'));
+    setShowDatePicker(true);
+  };
+
+  const closeBirthdayModal = () => {
     setShowDatePicker(false);
-    if (selectedDate) {
-      setFormData({...formData, dob: selectedDate});
+  };
+
+  const handleBirthdayInputChange = (text) => {
+    // Only allow digits and dashes
+    if (/^[\d-]*$/.test(text)) {
+      setBirthdayInputText(text);
+      
+      // Auto-format as user types
+      if (text.length === 4 && !text.includes('-')) {
+        setBirthdayInputText(text + '-');
+      } else if (text.length === 7 && text.split('-').length === 2) {
+        setBirthdayInputText(text + '-');
+      }
+    }
+  };
+
+  const confirmBirthday = () => {
+    // Parse the date from the input text
+    try {
+      const newDate = new Date(birthdayInputText);
+      
+      // Validate the date
+      if (isNaN(newDate.getTime())) {
+        Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format.');
+        return;
+      }
+      
+      // Check if date is in the past (birthday should be in the past)
+      if (newDate >= new Date()) {
+        Alert.alert('Invalid Date', 'Birthday must be in the past.');
+        return;
+      }
+      
+      // Check if date is reasonable (not too far in the past)
+      const minDate = new Date(1900, 0, 1);
+      if (newDate < minDate) {
+        Alert.alert('Invalid Date', 'Please enter a reasonable birth year (after 1900).');
+        return;
+      }
+      
+      setFormData(prev => ({ ...prev, dob: newDate }));
+      closeBirthdayModal();
+      
+    } catch (error) {
+      Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format.');
     }
   };
 
@@ -298,7 +346,7 @@ export default function CreateAccount() {
             
             <TouchableOpacity 
               style={styles.dropdownButton} 
-              onPress={() => setShowDatePicker(true)}
+              onPress={openBirthdayModal}
             >
               <Text style={styles.dropdownButtonText}>
                 Date of Birth: {formData.dob.toLocaleDateString()}
@@ -535,41 +583,57 @@ export default function CreateAccount() {
         </View>
       </Modal>
 
-      {/* Date Picker Modal */}
+      {/* Birthday Picker Modal */}
       <Modal
         visible={showDatePicker}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowDatePicker(false)}
+        onRequestClose={closeBirthdayModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Date of Birth</Text>
-            <View style={styles.datePickerContainer}>
-              <Text style={styles.datePickerText}>
-                Current: {formData.dob.toLocaleDateString()}
-              </Text>
-              <DateTimePicker
-                value={formData.dob}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleDateChange}
-                maximumDate={new Date()}
-                minimumDate={new Date(1900, 0, 1)}
-              />
-              <TouchableOpacity
-                style={styles.datePickerDoneButton}
-                onPress={() => setShowDatePicker(false)}
-              >
-                <Text style={styles.datePickerDoneButtonText}>Done</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Date of Birth</Text>
+              <TouchableOpacity onPress={closeBirthdayModal}>
+                <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.modalCancelButton}
-              onPress={() => setShowDatePicker(false)}
-            >
-              <Text style={styles.modalCancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
+            
+            <View style={styles.datePickerContainer}>
+              <Text style={styles.datePickerLabel}>
+                Enter your date of birth:
+              </Text>
+              
+              <View style={styles.dateInputRow}>
+                <Text style={styles.dateInputLabel}>Date:</Text>
+                <TextInput
+                  style={styles.dateInput}
+                  value={birthdayInputText}
+                  onChangeText={handleBirthdayInputChange}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                  maxLength={10}
+                />
+              </View>
+              
+              <Text style={styles.selectedDateText}>
+                Current: {formData.dob.toLocaleDateString()}
+              </Text>
+              
+              <Text style={styles.dateHelpText}>
+                Enter date in YYYY-MM-DD format (e.g., 1990-05-15). Birthday must be in the past.
+              </Text>
+            </View>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelButton} onPress={closeBirthdayModal}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmButton} onPress={confirmBirthday}>
+                <Text style={styles.confirmButtonText}>Confirm Date</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -775,7 +839,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     padding: 20,
-    gap: 15
   },
   button: { 
     flex: 1,
@@ -863,25 +926,109 @@ const styles = StyleSheet.create({
     maxHeight: 300
   },
   
-  datePickerContainer: {
+  // New birthday picker styles
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20
+    width: '100%',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
-  datePickerText: {
-    fontSize: 18,
-    color: '#333',
-    marginBottom: 15
+  closeButton: {
+    fontSize: 24,
+    color: '#666',
+    fontWeight: 'bold',
   },
-  datePickerDoneButton: {
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 15
+  datePickerContainer: {
+    width: '100%',
+    marginBottom: 20,
   },
-  datePickerDoneButtonText: {
-    color: 'white',
+  datePickerLabel: {
     fontSize: 16,
-    fontWeight: '600'
+    fontWeight: '600',
+    color: '#111',
+    marginBottom: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  dateInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    justifyContent: 'center',
+  },
+  dateInputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111',
+    marginRight: 15,
+  },
+  dateInput: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#111',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    width: 140,
+    textAlign: 'center',
+  },
+  selectedDateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3b82f6',
+    marginBottom: 15,
+    textAlign: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    width: '100%',
+  },
+  dateHelpText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 20,
+  },
+  cancelButton: {
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    flex: 1,
+    alignItems: 'center',
+    marginRight: 7,
+  },
+  cancelButtonText: {
+    color: '#374151',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmButton: {
+    backgroundColor: '#22c55e',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: 'center',
+    marginLeft: 7,
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   }
 });

@@ -44,11 +44,8 @@ export default function UserHomepage() {
     if (!isComponentMounted) return;
     
     const checkAuthOnMount = async () => {
-      console.log('🔒 [UserHomepage] Checking authentication on mount...');
-      
       // Check if user exists
       if (!user) {
-        console.log('🔒 [UserHomepage] No user found, redirecting to login');
         // Instead of navigating immediately, set a flag and let the component handle it
         // This avoids the navigation timing issue
         return;
@@ -57,12 +54,9 @@ export default function UserHomepage() {
       // Check if session is valid
       const isValid = await checkSessionValidity();
       if (!isValid) {
-        console.log('🔒 [UserHomepage] Session invalid, redirecting to login');
         // checkSessionValidity will handle logout and routing
         return;
       }
-
-      console.log('✅ [UserHomepage] Authentication check passed');
     };
 
     checkAuthOnMount();
@@ -73,7 +67,6 @@ export default function UserHomepage() {
     if (!isComponentMounted) return;
     
     if (!user) {
-      console.log('🔒 [UserHomepage] User state changed to null, redirecting to login');
       // Instead of navigating immediately, set a flag and let the component handle it
       // This avoids the navigation timing issue
     }
@@ -86,10 +79,9 @@ export default function UserHomepage() {
     // Wait a bit longer to ensure navigation is ready
     const timer = setTimeout(() => {
       try {
-        console.log('🔒 [UserHomepage] Now attempting navigation to login...');
         router.replace('/PhoneLogin');
       } catch (error) {
-        console.error('🔒 [UserHomepage] Navigation failed:', error);
+        // Navigation failed silently
       }
     }, 500);
     
@@ -123,7 +115,6 @@ export default function UserHomepage() {
           setLastAnnouncementCheck(new Date().toISOString());
         }
       } catch (e) {
-        console.warn('Failed to load announcements:', e);
         if (isMounted) setAnnouncements([]);
       } finally {
         if (isMounted) setAnnouncementsLoading(false);
@@ -145,7 +136,6 @@ export default function UserHomepage() {
         // Check if session is still valid
         const isSessionValid = await checkSessionValidity();
         if (!isSessionValid) {
-          console.log('🔄 Session expired in user homepage, logout will handle routing');
           // logout method will handle both session clearing and routing to login
           return;
         }
@@ -191,7 +181,6 @@ export default function UserHomepage() {
       setAnnouncements(newAnnouncements);
       setLastAnnouncementCheck(new Date().toISOString());
     } catch (e) {
-      console.warn('Failed to load announcements:', e);
       setAnnouncements([]);
     }
   };
@@ -358,12 +347,12 @@ export default function UserHomepage() {
         <Text style={[styles.sectionHeading, { marginTop: 14 }]}>Quick Actions</Text>
         <View style={styles.quickGrid}>
           {[
-            { label: 'Report Issue', icon: 'alert-circle-outline', route: '/report-issue' },
-            { label: 'Suggest Improvement', icon: 'create-outline', route: null },
+            { label: 'Report Issue', icon: 'warning-outline', route: '/report-issue' },
+            { label: 'Suggest Improvement', icon: 'bulb-outline', route: '/create-post' },
             { label: 'Community Forum', icon: 'people-outline', route: '/community' },
             { label: 'Emergency Contacts', icon: 'call-outline', route: '/emergency-contacts' },
-            { label: 'Local Services', icon: 'search-outline', route: null },
-            { label: 'City News', icon: 'newspaper-outline', route: null },
+            { label: 'Leaderboard', icon: 'trophy-outline', route: '/leaderboard' },
+            { label: 'City News', icon: 'newspaper-outline', route: '/announcements-list' },
           ].map((item) => (
             <Pressable 
               key={item.label} 
@@ -432,7 +421,7 @@ export default function UserHomepage() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
-    </UserProtectedRoute>
+  </UserProtectedRoute>
   );
 }
 
