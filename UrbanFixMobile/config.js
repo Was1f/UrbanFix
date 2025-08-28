@@ -7,7 +7,7 @@
 // 2. Update the API_IP value below
 // 3. Restart Expo development server with: npx expo start --clear
 
-const API_IP = '172.20.10.10';
+const API_IP = '192.168.0.130';
 const API_PORT = '5000';
 const API_BASE_URL = `http://${API_IP}:${API_PORT}`;
 

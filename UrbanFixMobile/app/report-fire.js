@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { apiUrl } from '../constants/api';
+import { WebView } from 'react-native-webview';
 
 export default function ReportFire() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function ReportFire() {
   const [mediaFiles, setMediaFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
+  const [mapCenter, setMapCenter] = useState(null);
 
   useEffect(() => {
     requestLocationPermission();
@@ -129,15 +131,16 @@ export default function ReportFire() {
 
     setLoading(true);
     try {
+      const effectiveCoords = mapCenter || (userLocation ? {
+        latitude: userLocation.coords.latitude,
+        longitude: userLocation.coords.longitude,
+      } : null);
       const reportData = {
         ...formData,
         category: 'Fire',
         urgencyLevel: formData.urgencyLevel,
         mediaFiles: mediaFiles,
-        coordinates: userLocation ? {
-          latitude: userLocation.coords.latitude,
-          longitude: userLocation.coords.longitude,
-        } : null,
+        coordinates: effectiveCoords,
         timestamp: new Date().toISOString(),
       };
 
@@ -177,6 +180,42 @@ export default function ReportFire() {
     { value: 'high', label: 'High', color: '#ff4444' },
   ];
 
+  const getLeafletHtml = (latitude, longitude) => `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+        <style>
+          html, body, #map { height: 100%; margin: 0; padding: 0; }
+          .leaflet-container { background: #fff; }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+        <script>
+          (function(){
+            var lat = ${Number.isFinite(latitude) ? latitude : 23.8103};
+            var lng = ${Number.isFinite(longitude) ? longitude : 90.4125};
+            var map = L.map('map', { zoomControl: true, attributionControl: false }).setView([lat, lng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            var marker = L.marker([lat, lng]).addTo(map);
+            function postCenter(){
+              var c = map.getCenter();
+              if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'move', center: { latitude: c.lat, longitude: c.lng } }));
+              }
+            }
+            map.on('moveend', postCenter);
+            postCenter();
+          })();
+        </script>
+      </body>
+    </html>
+  `;
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -203,10 +242,26 @@ export default function ReportFire() {
                      <Ionicons name="location" size={20} color="#000" />
         </View>
 
-        {/* Map Placeholder */}
+        {/* Map View */}
         <View style={styles.mapContainer}>
-          <Text style={styles.mapText}>Map View</Text>
-          <Text style={styles.mapSubtext}>Location: {formData.location || 'Detecting location...'}</Text>
+          <WebView
+            originWhitelist={["*"]}
+            javaScriptEnabled
+            domStorageEnabled
+            onMessage={(event) => {
+              try {
+                const data = JSON.parse(event.nativeEvent.data);
+                if (data && data.type === 'move' && data.center) {
+                  setMapCenter({ latitude: data.center.latitude, longitude: data.center.longitude });
+                }
+              } catch (e) {}
+            }}
+            source={{ html: getLeafletHtml(
+              userLocation?.coords?.latitude,
+              userLocation?.coords?.longitude
+            ) }}
+            style={{ width: '100%', height: 220, borderRadius: 12, overflow: 'hidden', backgroundColor: '#fff' }}
+          />
         </View>
 
         {/* Description Input */}
