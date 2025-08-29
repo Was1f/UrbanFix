@@ -187,6 +187,12 @@ const CommunityHome = () => {
     return user.phone;
   };
 
+  // Get user's location from user model
+  const getUserLocation = () => {
+    if (!user || !user.location) return 'Dhanmondi';
+    return user.location;
+  };
+
   // Helper function to construct proper image URLs
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
@@ -557,7 +563,13 @@ const CommunityHome = () => {
   const renderFilterChips = () => {
     const activeFilters = [];
     
-    if (filterArea) activeFilters.push({ label: filterArea === 'Dhanmondi' ? 'My Area (Dhanmondi)' : filterArea, type: 'area' });
+    if (filterArea) {
+      const userLoc = getUserLocation();
+      activeFilters.push({ 
+        label: filterArea === userLoc ? `My Area (${userLoc})` : filterArea, 
+        type: 'area' 
+      });
+    }
     if (filterCategory) activeFilters.push({ label: filterCategory, type: 'category' });
     if (filterUrgency) activeFilters.push({ label: urgencyOptions.find(u => u.value === filterUrgency)?.label, type: 'urgency' });
     
@@ -795,7 +807,7 @@ const CommunityHome = () => {
 
         {/* Content */}
         <View style={styles.content}>
-          {/* Location Selection - Back to original style */}
+          {/* Location Selection */}
           {boards.length > 0 && (
             <View style={styles.locationSection}>
               <Text style={styles.sectionLabel}>Browse by area:</Text>
@@ -819,19 +831,19 @@ const CommunityHome = () => {
                   </Text>
                 </Pressable>
                 
-                {/* My Area - Hardcoded to Dhanmondi */}
+                {/* Dynamic My Area based on user location */}
                 <Pressable
                   style={[
                     styles.locationChip,
-                    filterArea === 'Dhanmondi' && styles.locationChipSelected
+                    filterArea === getUserLocation() && styles.locationChipSelected
                   ]}
-                  onPress={() => setFilterArea('Dhanmondi')}
+                  onPress={() => setFilterArea(getUserLocation())}
                 >
                   <Text style={[
                     styles.locationChipText,
-                    filterArea === 'Dhanmondi' && styles.locationChipTextSelected
+                    filterArea === getUserLocation() && styles.locationChipTextSelected
                   ]}>
-                    My Area (Dhanmondi)
+                    My Area ({getUserLocation()})
                   </Text>
                 </Pressable>
                 
@@ -944,50 +956,50 @@ const CommunityHome = () => {
                       </View>
                       
                       <View style={styles.actionButtons}>
-                      {/* Special Help button for Reports with high priority - but NOT for your own posts */}
-                      {discussion.type === 'Report' && 
-                      (discussion.priority === 'high' || discussion.priority === 'urgent') && 
-                      discussion.authorPhone !== getCurrentUser() && // <- ADD THIS CHECK
-                      (() => {
-                        const currentUserPhone = getCurrentUser();
-                        const userIsHelping = discussion.helpers?.some(h => h.username === currentUserPhone);
-                        
-                        return (
+                        {/* Special Help button for Reports with high priority - but NOT for your own posts */}
+                        {discussion.type === 'Report' && 
+                        (discussion.priority === 'high' || discussion.priority === 'urgent') && 
+                        discussion.authorPhone !== getCurrentUser() && 
+                        (() => {
+                          const currentUserPhone = getCurrentUser();
+                          const userIsHelping = discussion.helpers?.some(h => h.username === currentUserPhone);
+                          
+                          return (
+                            <Pressable
+                              style={[
+                                styles.helpButton,
+                                userIsHelping && styles.helpButtonActive
+                              ]}
+                              onPress={() => handleOfferHelp(discussion._id)}
+                            >
+                              <Text style={[
+                                styles.helpButtonText,
+                                userIsHelping && styles.helpButtonTextActive
+                              ]}>
+                                {userIsHelping ? '✓ Helping' : '🆘 Help'}
+                              </Text>
+                            </Pressable>
+                          );
+                        })()}
+                          
                           <Pressable
                             style={[
-                              styles.helpButton,
-                              userIsHelping && styles.helpButtonActive
+                              styles.reportButton,
+                              reportedMap[discussion._id] && styles.reportButtonReported
                             ]}
-                            onPress={() => handleOfferHelp(discussion._id)}
+                            onPress={() => {
+                              const isReported = !!reportedMap[discussion._id];
+                              isReported ? handleRevoke(discussion._id) : handleReport(discussion._id);
+                            }}
                           >
                             <Text style={[
-                              styles.helpButtonText,
-                              userIsHelping && styles.helpButtonTextActive
+                              styles.reportButtonText,
+                              reportedMap[discussion._id] && styles.reportButtonTextReported
                             ]}>
-                              {userIsHelping ? '✓ Helping' : '🆘 Help'}
+                              {reportedMap[discussion._id] ? '✓' : '⚠️'}
                             </Text>
                           </Pressable>
-                        );
-                      })()}
-                        
-                        <Pressable
-                          style={[
-                            styles.reportButton,
-                            reportedMap[discussion._id] && styles.reportButtonReported
-                          ]}
-                          onPress={() => {
-                            const isReported = !!reportedMap[discussion._id];
-                            isReported ? handleRevoke(discussion._id) : handleReport(discussion._id);
-                          }}
-                        >
-                          <Text style={[
-                            styles.reportButtonText,
-                            reportedMap[discussion._id] && styles.reportButtonTextReported
-                          ]}>
-                            {reportedMap[discussion._id] ? '✓' : '⚠️'}
-                          </Text>
-                        </Pressable>
-                      </View>
+                        </View>
                     </View>
                   </Pressable>
                 )}

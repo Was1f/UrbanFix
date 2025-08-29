@@ -427,7 +427,7 @@ const PostDetail = () => {
 
       if (response.ok) {
         console.log('🎉 Delete successful - navigating back');
-        router.back();
+        router.push('/community');
       } else {
         console.log('❌ Delete failed - response not ok');
         const responseText = await response.text();
@@ -852,7 +852,7 @@ const PostDetail = () => {
         <View style={styles.header}>
           <Pressable
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.push('/community')}
           >
             <Text style={styles.backIcon}>←</Text>
           </Pressable>

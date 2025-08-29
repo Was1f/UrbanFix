@@ -530,7 +530,7 @@ export default function CreatePost() {
       }
 
       Alert.alert('Success', 'Post created successfully!', [
-        { text: 'OK', onPress: () => router.replace('/community') }
+        { text: 'OK', onPress: () => router.push('/community') }
       ]);
     } catch (e) {
       console.error('Error posting:', e);
@@ -777,7 +777,7 @@ export default function CreatePost() {
       <View style={styles.header}>
         <Pressable
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.push('/community')}
         >
           <Text style={styles.backIcon}>←</Text>
         </Pressable>
