@@ -58,7 +58,7 @@ function AppNavigator() {
           <Stack.Screen name="CommunityHome" component={CommunityHome} />
           <Stack.Screen name="EmergencyContacts" component={EmergencyContacts} />
           <Stack.Screen name="AnnouncementsList" component={AnnouncementsList} />
-           {/* <Stack.Screen name="ViewPublicProfile" component={ViewPublicProfile} />  */}
+          <Stack.Screen name="ViewPublicProfile" component={ViewPublicProfile} /> 
 
 
           {/* NID verification flow */}

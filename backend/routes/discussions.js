@@ -668,7 +668,7 @@ router.post('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
     const { content, author = 'Anonymous' } = req.body;
-    
+    console.log('Comment creation - author received:', author);
     // Validate ObjectId
     if (!isValidObjectId(id)) {
       return res.status(400).json({ message: 'Invalid discussion ID' });
@@ -691,17 +691,17 @@ router.post('/:id/comments', async (req, res) => {
     if (author && author !== 'Anonymous') {
       try {
         const user = await User.findOne({ phone: author });
+
         if (user) {
-          // CRITICAL FIX: Properly format the display name
-          if (user.fname && user.lname) {
-            authorName = `${user.fname} ${user.lname}`.trim();
-          } else if (user.username) {
+          if (user.username) {
             authorName = user.username.trim();
+          } else if (user.fname && user.lname) {
+            authorName = `${user.fname} ${user.lname}`.trim();
           } else {
-            // Fallback to a formatted version of phone
             authorName = `User ${user.phone.slice(-4)}`;
           }
           authorProfilePicture = user.profilePic;
+          
         }
       } catch (userError) {
         console.error('Error finding user for comment author:', userError);
@@ -717,7 +717,8 @@ router.post('/:id/comments', async (req, res) => {
       createdAt: new Date(),
       status: 'active'
     };
-
+    console.log('Comment being saved:', newComment); // Add this line
+    console.log('Author phone should be:', author); // Add this line   
     discussion.comments.push(newComment);
     await discussion.save();
 

@@ -28,7 +28,7 @@ router.get('/profile/:identifier', async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(identifier)) {
       // Handle MongoDB _id
       query = { _id: new mongoose.Types.ObjectId(identifier) };
-    } else if (/^\d{5,}$/.test(identifier)) {
+    } else if (/^\d{4,}$/.test(identifier)) {
       // Handle phone (any number, at least 5 digits to avoid conflict with short IDs)
       query = { phone: identifier };
     } else if (/^\S+@\S+\.\S+$/.test(identifier)) {

@@ -18,6 +18,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { apiUrl } from '../constants/api';
 import { AuthContext } from '../context/AuthContext';
 import UserProtectedRoute from '../components/UserProtectedRoute';
+import { useProfileNavigation } from '../hooks/useProfileNavigation';
 
 // ProfilePicture component (same as in community)
 const ProfilePicture = ({ 
@@ -137,6 +138,7 @@ const PostDetail = () => {
   const [commenting, setCommenting] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { navigateToProfile } = useProfileNavigation();
 
   // For different post types
   const [selectedPollOption, setSelectedPollOption] = useState(null);
@@ -467,16 +469,23 @@ const PostDetail = () => {
         {/* Post Header */}
         <View style={styles.postHeader}>
           <View style={styles.authorSection}>
-            <ProfilePicture 
-              profilePicture={post.authorProfilePicture} 
-              name={post.author || 'Anonymous'} 
-              size={40}
-              style={{ marginRight: 12 }}
-            />
-            <View style={styles.authorInfo}>
-              <Text style={styles.authorName}>{post.author || 'Anonymous'}</Text>
-              <Text style={styles.postTime}>{formatTimeAgo(post.createdAt)}</Text>
-            </View>
+            <Pressable 
+              style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+              onPress={() => navigateToProfile(post.authorPhone, post.author)}
+            >
+              <ProfilePicture 
+                profilePicture={post.authorProfilePicture} 
+                name={post.author || 'Anonymous'} 
+                size={40}
+                style={{ marginRight: 12 }}
+              />
+              <View style={styles.authorInfo}>
+                <Text style={[styles.authorName, { color: '#6366f1' }]}>
+                  {post.author || 'Anonymous'}
+                </Text>
+                <Text style={styles.postTime}>{formatTimeAgo(post.createdAt)}</Text>
+              </View>
+            </Pressable>
           </View>
 
           {/* Post options for author */}
@@ -745,29 +754,50 @@ const PostDetail = () => {
     );
   };
 
-  const renderComment = ({ item: comment }) => (
-    <View style={styles.commentContainer}>
-      <View style={styles.commentHeader}>
-        <ProfilePicture 
-          profilePicture={comment.authorProfilePicture} 
-          name={comment.author || 'Anonymous'} 
-          size={32}
-          style={{ marginRight: 12 }}
-        />
-        <View style={styles.commentInfo}>
-          <Text style={styles.commentAuthor}>
-            {comment.author || 'Anonymous'}
-          </Text>
-          <Text style={styles.commentTime}>
-            {formatTimeAgo(comment.createdAt)}
-          </Text>
+  const renderComment = ({ item: comment }) => {
+    const handleCommentAuthorPress = () => {
+      console.log('Comment author pressed:', {
+        authorPhone: comment.authorPhone,
+        author: comment.author,
+        hasNavigateToProfile: typeof navigateToProfile === 'function'
+      });
+      
+      if (comment.authorPhone && comment.authorPhone !== 'Anonymous') {
+        navigateToProfile(comment.authorPhone, comment.author);
+      } else {
+        console.log('Cannot navigate - invalid author data');
+      }
+    };
+
+    return (
+      <View style={styles.commentContainer}>
+        <View style={styles.commentHeader}>
+          <Pressable 
+            style={{ flexDirection: 'row', alignItems: 'center' }}
+            onPress={handleCommentAuthorPress}
+          >
+            <ProfilePicture 
+              profilePicture={comment.authorProfilePicture} 
+              name={comment.author || 'Anonymous'} 
+              size={32}
+              style={{ marginRight: 12 }}
+            />
+            <View style={styles.commentInfo}>
+              <Text style={[styles.commentAuthor, { color: '#6366f1' }]}>
+                {comment.author || 'Anonymous'}
+              </Text>
+              <Text style={styles.commentTime}>
+                {formatTimeAgo(comment.createdAt)}
+              </Text>
+            </View>
+          </Pressable>
+        </View>
+        <View style={styles.commentBody}>
+          <Text style={styles.commentText}>{comment.content}</Text>
         </View>
       </View>
-      <View style={styles.commentBody}>
-        <Text style={styles.commentText}>{comment.content}</Text>
-      </View>
-    </View>
-  );
+    );
+  };
 
   const renderCommentSection = () => (
     <View style={styles.commentSection}>

@@ -18,6 +18,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { apiUrl } from '../constants/api';
 import UserProtectedRoute from '../components/UserProtectedRoute';
 import { AuthContext } from '../context/AuthContext';
+import { useProfileNavigation } from '../hooks/useProfileNavigation';
 
 const { width } = Dimensions.get('window');
 
@@ -135,6 +136,7 @@ const ProfilePicture = ({
 const CommunityHome = () => {
   const router = useRouter();
   const { user } = useContext(AuthContext);
+  const { navigateToProfile } = useProfileNavigation();
 
   const [boards, setBoards] = useState([]);
   const [discussions, setDiscussions] = useState([]);
@@ -933,15 +935,20 @@ const CommunityHome = () => {
                     {/* Post Footer with Profile Picture */}
                     <View style={styles.postFooter}>
                       <View style={styles.postMeta}>
-                        <View style={styles.authorContainer}>
+                        <Pressable 
+                          style={styles.authorContainer}
+                          onPress={() => navigateToProfile(discussion.authorPhone, discussion.author)}
+                        >
                           <ProfilePicture 
                             profilePicture={discussion.authorProfilePicture} 
                             name={discussion.author || 'Anonymous'} 
                             size={24}
                             style={{ marginRight: 8 }}
                           />
-                          <Text style={styles.authorText}>By {discussion.author || 'Anonymous'}</Text>
-                        </View>
+                          <Text style={[styles.authorText, { color: '#6366f1' }]}>
+                            By {discussion.author || 'Anonymous'}
+                          </Text>
+                        </Pressable>
                         <View style={styles.engagementStats}>
                           <Text style={styles.statsText}>
                             ❤️ {discussion.likes?.length || 0}

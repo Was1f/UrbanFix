@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 // Comment schema for nested comments
 const CommentSchema = new mongoose.Schema({
   content: { type: String, required: true },
+  authorPhone: String,
   author: { type: String, default: "Anonymous" },
   authorProfilePicture: { type: mongoose.Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now },
