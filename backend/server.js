@@ -1,11 +1,9 @@
-// server.js - Updated configuration
+// server.js - Serverless-ready for Vercel
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const os = require('os');
 const path = require('path');
-require('dotenv').config();
 
 dotenv.config();
 
@@ -13,8 +11,6 @@ const app = express();
 
 // ===== Middleware =====
 app.use(cors());
-
-// Increase payload size limits for media uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -34,10 +30,9 @@ const accountRoutes = require('./routes/AccountCreate');
 const phoneAuthRoutes = require('./routes/loginAuth');
 const userInfoRoutes = require('./routes/UserInfo');
 const locationRoutes = require('./routes/locations');
-const notificationRoutes = require('./routes/notifications'); // Add notification routes
-const ticketRoutes = require('./routes/tickets');
+const notificationRoutes = require('./routes/notifications');
+const ticketRoutes = require("./routes/tickets");
 const fetchPostsRoutes = require("./routes/FetchPosts");
-
 
 // ===== Use Routes =====
 app.use('/api/boards', boardRoutes);
@@ -53,33 +48,8 @@ app.use('/api/account', accountRoutes);
 app.use('/api', phoneAuthRoutes);
 app.use('/api/user', userInfoRoutes);
 app.use('/api/locations', locationRoutes);
-app.use('/api/notifications', notificationRoutes); // Add notification routes
+app.use('/api/notifications', notificationRoutes);
 app.use("/api/posts", fetchPostsRoutes);
-
-
-// ===== Scheduled Tasks =====
-const NotificationService = require('./services/notificationService');
-
-// Check leaderboard and create notifications weekly (run this with a cron job in production)
-const scheduleLeaderboardCheck = () => {
-  // Check weekly leaderboard every Sunday at midnight
-  setInterval(async () => {
-    const now = new Date();
-    if (now.getDay() === 0 && now.getHours() === 0) { // Sunday at midnight
-      console.log('Running weekly leaderboard check...');
-      await NotificationService.checkLeaderboardChanges('weekly');
-    }
-  }, 60 * 60 * 1000); // Check every hour
-
-  // Clean up old notifications daily at 2 AM
-  setInterval(async () => {
-    const now = new Date();
-    if (now.getHours() === 2) {
-      console.log('Cleaning up old notifications...');
-      await NotificationService.cleanupOldNotifications();
-    }
-  }, 60 * 60 * 1000); // Check every hour
-};
 app.use('/api/tickets', ticketRoutes);
 
 // ===== Health check endpoint =====
@@ -112,8 +82,6 @@ app.get('/community', (req, res) => {
 // ===== Error Handling Middleware =====
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  
-  // Handle specific error types
   if (err.type === 'entity.too.large') {
     return res.status(413).json({
       success: false,
@@ -121,7 +89,6 @@ app.use((err, req, res, next) => {
       error: 'PAYLOAD_TOO_LARGE'
     });
   }
-  
   res.status(500).json({
     success: false,
     message: 'Something went wrong!',
@@ -129,63 +96,34 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ===== Helper for LAN IP =====
-function getWirelessNetworkIP() {
-  const interfaces = os.networkInterfaces();
-  
-  // Priority order: WiFi/Wireless interfaces first, then other external interfaces
-  const priorityInterfaces = ['Wi-Fi', 'wlan0', 'wlan1', 'wifi', 'wireless'];
-  
-  // First try to find priority wireless interfaces
-  for (const interfaceName of Object.keys(interfaces)) {
-    if (priorityInterfaces.some(priority => interfaceName.toLowerCase().includes(priority.toLowerCase()))) {
-      for (const net of interfaces[interfaceName] || []) {
-        if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
-          return { ip: net.address, interface: interfaceName };
-        }
-      }
-    }
+// ===== MongoDB Connection (serverless-friendly) =====
+let cached = global.mongoose;
+
+if (!cached) cached = global.mongoose = { conn: null, promise: null };
+
+async function dbConnect() {
+  if (cached.conn) return cached.conn;
+
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    }).then((mongoose) => mongoose);
   }
-  
-  // If no priority interfaces found, look for any external IPv4 interface
-  for (const interfaceName of Object.keys(interfaces)) {
-    for (const net of interfaces[interfaceName] || []) {
-      if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
-        return { ip: net.address, interface: interfaceName };
-      }
-    }
-  }
-  
-  return null;
+  cached.conn = await cached.promise;
+  return cached.conn;
 }
 
-// ===== MongoDB Connection =====
-const PORT = process.env.PORT || 5000;
+// ===== Middleware to connect MongoDB per request =====
+app.use(async (req, res, next) => {
+  try {
+    await dbConnect();
+    next();
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    res.status(500).json({ success: false, message: 'Database connection failed' });
+  }
+});
 
-mongoose.connect(
-  process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/community-app',
-  { useNewUrlParser: true, useUnifiedTopology: true }
-)
-.then(() => {
-  console.log('MongoDB Connected');
-
-  // Start scheduled tasks
-  scheduleLeaderboardCheck();
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Server accessible at:`);
-    console.log(`  - Local: http://localhost:${PORT}`);
-    
-    // Get actual network interfaces
-    const localIP = getWirelessNetworkIP();
-    if (localIP) {
-      console.log(`  - Network: http://${localIP.ip}:${PORT} (${localIP.interface})`);
-    }
-    
-    console.log(`  - Uploads directory: ${path.join(__dirname, 'uploads')}`);
-  });
-})
-.catch(err => console.error('MongoDB connection error:', err));
-
+// ===== Export app for Vercel serverless =====
 module.exports = app;
