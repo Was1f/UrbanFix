@@ -34,10 +34,9 @@ const accountRoutes = require('./routes/AccountCreate');
 const phoneAuthRoutes = require('./routes/loginAuth');
 const userInfoRoutes = require('./routes/UserInfo');
 const locationRoutes = require('./routes/locations');
-const notificationRoutes = require('./routes/notifications'); // Add notification routes
-const ticketRoutes = require('./routes/tickets');
+const notificationRoutes = require('./routes/notifications'); 
+const ticketRoutes = require("./routes/tickets");
 const fetchPostsRoutes = require("./routes/FetchPosts");
-
 
 // ===== Use Routes =====
 app.use('/api/boards', boardRoutes);
@@ -53,34 +52,30 @@ app.use('/api/account', accountRoutes);
 app.use('/api', phoneAuthRoutes);
 app.use('/api/user', userInfoRoutes);
 app.use('/api/locations', locationRoutes);
-app.use('/api/notifications', notificationRoutes); // Add notification routes
+app.use('/api/notifications', notificationRoutes); 
 app.use("/api/posts", fetchPostsRoutes);
-
+app.use('/api/tickets', ticketRoutes);
 
 // ===== Scheduled Tasks =====
 const NotificationService = require('./services/notificationService');
 
-// Check leaderboard and create notifications weekly (run this with a cron job in production)
 const scheduleLeaderboardCheck = () => {
-  // Check weekly leaderboard every Sunday at midnight
   setInterval(async () => {
     const now = new Date();
-    if (now.getDay() === 0 && now.getHours() === 0) { // Sunday at midnight
+    if (now.getDay() === 0 && now.getHours() === 0) {
       console.log('Running weekly leaderboard check...');
       await NotificationService.checkLeaderboardChanges('weekly');
     }
-  }, 60 * 60 * 1000); // Check every hour
+  }, 60 * 60 * 1000);
 
-  // Clean up old notifications daily at 2 AM
   setInterval(async () => {
     const now = new Date();
     if (now.getHours() === 2) {
       console.log('Cleaning up old notifications...');
       await NotificationService.cleanupOldNotifications();
     }
-  }, 60 * 60 * 1000); // Check every hour
+  }, 60 * 60 * 1000);
 };
-app.use('/api/tickets', ticketRoutes);
 
 // ===== Health check endpoint =====
 app.get('/health', (req, res) => {
@@ -97,7 +92,7 @@ app.get('/community', (req, res) => {
     message: 'Community endpoint is working',
     available_endpoints: [
       '/api/boards',
-      '/api/discussions', 
+      '/api/discussions',
       '/api/emergency-reports',
       '/api/emergency-contacts',
       '/api/announcements',
@@ -112,8 +107,6 @@ app.get('/community', (req, res) => {
 // ===== Error Handling Middleware =====
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  
-  // Handle specific error types
   if (err.type === 'entity.too.large') {
     return res.status(413).json({
       success: false,
@@ -121,7 +114,6 @@ app.use((err, req, res, next) => {
       error: 'PAYLOAD_TOO_LARGE'
     });
   }
-  
   res.status(500).json({
     success: false,
     message: 'Something went wrong!',
@@ -132,11 +124,8 @@ app.use((err, req, res, next) => {
 // ===== Helper for LAN IP =====
 function getWirelessNetworkIP() {
   const interfaces = os.networkInterfaces();
-  
-  // Priority order: WiFi/Wireless interfaces first, then other external interfaces
   const priorityInterfaces = ['Wi-Fi', 'wlan0', 'wlan1', 'wifi', 'wireless'];
-  
-  // First try to find priority wireless interfaces
+
   for (const interfaceName of Object.keys(interfaces)) {
     if (priorityInterfaces.some(priority => interfaceName.toLowerCase().includes(priority.toLowerCase()))) {
       for (const net of interfaces[interfaceName] || []) {
@@ -146,8 +135,7 @@ function getWirelessNetworkIP() {
       }
     }
   }
-  
-  // If no priority interfaces found, look for any external IPv4 interface
+
   for (const interfaceName of Object.keys(interfaces)) {
     for (const net of interfaces[interfaceName] || []) {
       if ((net.family === 'IPv4' || net.family === 4) && !net.internal) {
@@ -155,7 +143,7 @@ function getWirelessNetworkIP() {
       }
     }
   }
-  
+
   return null;
 }
 
@@ -168,24 +156,23 @@ mongoose.connect(
 )
 .then(() => {
   console.log('MongoDB Connected');
-
-  // Start scheduled tasks
   scheduleLeaderboardCheck();
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Server accessible at:`);
-    console.log(`  - Local: http://localhost:${PORT}`);
-    
-    // Get actual network interfaces
-    const localIP = getWirelessNetworkIP();
-    if (localIP) {
-      console.log(`  - Network: http://${localIP.ip}:${PORT} (${localIP.interface})`);
-    }
-    
-    console.log(`  - Uploads directory: ${path.join(__dirname, 'uploads')}`);
-  });
+  // ✅ Only listen if running locally (not in Vercel)
+  if (process.env.VERCEL !== "1") {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Server accessible at:`);
+      console.log(`  - Local: http://localhost:${PORT}`);
+      const localIP = getWirelessNetworkIP();
+      if (localIP) {
+        console.log(`  - Network: http://${localIP.ip}:${PORT} (${localIP.interface})`);
+      }
+      console.log(`  - Uploads directory: ${path.join(__dirname, 'uploads')}`);
+    });
+  }
 })
 .catch(err => console.error('MongoDB connection error:', err));
 
+// ✅ Export app for Vercel serverless
 module.exports = app;
