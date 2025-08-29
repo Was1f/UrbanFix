@@ -13,6 +13,7 @@ import CommunityHome from './app/community';
 import EmergencyContacts from './app/emergency-contacts';
 import AnnouncementsList from './app/announcements-list';
 import SplashScreen from './app/SplashScreen';
+import ViewPublicProfile from './app/ViewPublicProfile';
 
 // NID verification screens
 import NidVerifyScreen from './app/nidVerifyScreen';
@@ -57,6 +58,7 @@ function AppNavigator() {
           <Stack.Screen name="CommunityHome" component={CommunityHome} />
           <Stack.Screen name="EmergencyContacts" component={EmergencyContacts} />
           <Stack.Screen name="AnnouncementsList" component={AnnouncementsList} />
+           {/* <Stack.Screen name="ViewPublicProfile" component={ViewPublicProfile} />  */}
 
 
           {/* NID verification flow */}
