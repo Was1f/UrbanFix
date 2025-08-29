@@ -20,6 +20,7 @@ router.get('/locations', async (req, res) => {
 
 // Public profile view (by ID, phone, or email)
 
+// Public profile view (by ID, phone, or email)
 router.get('/profile/:identifier', async (req, res) => {
   const { identifier } = req.params;
   let query = {};
@@ -41,12 +42,25 @@ router.get('/profile/:identifier', async (req, res) => {
     console.log('Searching user with:', query);
 
     const user = await User.findOne(query).select(
-      'fname lname verificationBadge profession location points'
+      'fname lname verificationBadge profession location points profilePic bloodGroup bio gender dob skills languages'
     );
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    // Calculate age from date of birth
+    const calculateAge = (dob) => {
+      if (!dob) return null;
+      const today = new Date();
+      const birthDate = new Date(dob);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    };
 
     res.json({
       name: `${user.fname} ${user.lname}`,
@@ -54,6 +68,13 @@ router.get('/profile/:identifier', async (req, res) => {
       profession: user.profession || 'Not specified',
       location: user.location || 'Unknown',
       points: user.points || 0,
+      profilePic: user.profilePic || null,
+      bloodGroup: user.bloodGroup || null,
+      bio: user.bio || null,
+      gender: user.gender || null,
+      age: calculateAge(user.dob),
+      skills: user.skills || null,
+      languages: user.languages || ['English (US)'],
       _id: user._id
     });
   } catch (err) {
