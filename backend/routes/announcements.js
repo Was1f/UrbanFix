@@ -276,9 +276,9 @@ router.post('/admin', authenticateAdmin, upload.single('image'), async (req, res
 
     // CREATE NOTIFICATIONS for all users about the new announcement
     console.log('Creating notifications for new announcement...');
-    await NotificationService.notifyNewAnnouncement(
+    await NotificationService.notifyAllUsers(
+      `New ${announcement.customType || announcement.type} Announcement`,
       announcement.title,
-      announcement.customType || announcement.type,
       announcement._id
     );
 
