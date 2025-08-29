@@ -6,6 +6,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { apiUrl } from '../constants/api';
+import DiscussionCard from '../components/DiscussionCard';
 
 export default function ViewPublicProfile() {
   const { identifier } = useLocalSearchParams();
@@ -13,6 +14,10 @@ export default function ViewPublicProfile() {
   
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // NEW states for discussions
+  const [discussions, setDiscussions] = useState([]);
+  const [loadingDiscussions, setLoadingDiscussions] = useState(true);
 
   useEffect(() => {
     if (!identifier) {
@@ -30,6 +35,8 @@ export default function ViewPublicProfile() {
 
         if (res.ok) {
           setProfile(data);
+          // 🔹 fetch discussions after profile
+          fetchUserDiscussions(data._id);
         } else {
           Alert.alert('Error', data.message || 'Failed to fetch profile');
         }
@@ -38,6 +45,23 @@ export default function ViewPublicProfile() {
         Alert.alert('Error', 'Unable to fetch profile');
       } finally {
         setLoading(false);
+      }
+    };
+
+    const fetchUserDiscussions = async (userId) => {
+      try {
+        setLoadingDiscussions(true);
+        const res = await fetch(apiUrl(`/api/user/${userId}/discussions`));
+        const data = await res.json();
+        if (res.ok) {
+          setDiscussions(data);
+        } else {
+          console.error('Failed to fetch discussions:', data.message);
+        }
+      } catch (err) {
+        console.error('Error fetching discussions:', err);
+      } finally {
+        setLoadingDiscussions(false);
       }
     };
 
@@ -235,6 +259,21 @@ export default function ViewPublicProfile() {
           <View style={styles.memberSection}>
             <Text style={styles.memberText}>Community Member</Text>
           </View>
+        </View>
+
+        {/* 🔹 User Discussions Section */}
+        <View style={styles.discussionsSection}>
+          <Text style={styles.sectionTitle}>User's Discussions</Text>
+
+          {loadingDiscussions ? (
+            <ActivityIndicator size="large" color="#6366f1" style={{ marginVertical: 20 }} />
+          ) : discussions.length === 0 ? (
+            <Text style={styles.emptyText}>No discussions yet</Text>
+          ) : (
+            discussions.map((discussion) => (
+              <DiscussionCard key={discussion._id} discussion={discussion} />
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -463,5 +502,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6366f1',
     fontWeight: '600',
+  },
+
+  // Discussions
+  discussionsSection: {
+    marginTop: 24,
+    paddingHorizontal: 4,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#9ca3af',
+    fontSize: 14,
+    marginVertical: 12,
   },
 });
