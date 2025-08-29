@@ -2,7 +2,9 @@
   "dependencies": {
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-react-native": "^1.0.0",
+    "axios": "^1.11.0",
     "expo-gl": "^13.6.0",
-    "expo-gl-cpp": "^11.4.0"
+    "expo-gl-cpp": "^11.4.0",
+    "react-native-gifted-chat": "^2.8.1"
   }
 }
