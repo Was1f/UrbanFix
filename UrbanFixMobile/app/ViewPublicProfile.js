@@ -67,9 +67,17 @@ export default function ViewPublicProfile() {
     const fetchUserDiscussions = async (userId) => {
       try {
         setLoadingDiscussions(true);
-        const res = await fetch(apiUrl(`/api/user/${userId}/discussions`));
+        const res = await fetch(apiUrl(`/api/posts/user/${userId}/discussions`));
         const data = await res.json();
         if (res.ok) {
+          console.log('Discussions fetched:', data.length);
+          if (data.length > 0) {
+            console.log('First discussion:', {
+              title: data[0].title,
+              image: data[0].image,
+              hasImage: !!data[0].image
+            });
+          }
           setDiscussions(data);
         } else {
           console.error('Failed to fetch discussions:', data.message);

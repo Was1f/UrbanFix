@@ -2,8 +2,17 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { apiUrl } from '../constants/api';
 
 export default function DiscussionCard({ discussion }) {
+  console.log('DiscussionCard render:', {
+    title: discussion.title,
+    image: discussion.image,
+    imageType: typeof discussion.image,
+    hasImage: !!discussion.image,
+    imageLength: discussion.image ? discussion.image.length : 0
+  });
+  
   return (
     <View style={styles.card}>
       {/* Title */}
@@ -23,9 +32,20 @@ export default function DiscussionCard({ discussion }) {
       ) : null}
 
       {/* Image (if exists) */}
-      {discussion.image ? (
-        <Image source={{ uri: discussion.image }} style={styles.postImage} />
-      ) : null}
+      {discussion.image && discussion.image.trim() !== '' && (
+        <Image 
+          source={{ 
+            uri: discussion.image.startsWith('http') 
+              ? discussion.image 
+              : apiUrl(discussion.image)
+          }} 
+          style={styles.postImage}
+          resizeMode="cover"
+          onError={(error) => {
+            console.log('Image load error:', error.nativeEvent.error);
+          }}
+        />
+      )}
 
       {/* Footer: Type + Likes + Comments */}
       <View style={styles.footer}>
@@ -102,4 +122,5 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginLeft: 4,
   },
+
 });

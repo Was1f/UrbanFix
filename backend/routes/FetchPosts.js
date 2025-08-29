@@ -25,8 +25,18 @@ router.get("/user/:userId/discussions", async (req, res) => {
     if (conditions.length === 0) return res.json([]);
 
     const discussions = await Discussion.find({ $or: conditions })
+      .select('title description type author authorPhone location time image likeCount comments createdAt')
       .sort({ createdAt: -1 })
       .lean();
+
+    console.log('Discussions found:', discussions.length);
+    if (discussions.length > 0) {
+      console.log('First discussion sample:', {
+        title: discussions[0].title,
+        image: discussions[0].image,
+        hasImage: !!discussions[0].image
+      });
+    }
 
     res.json(discussions);
   } catch (err) {

@@ -46,15 +46,22 @@ export default function Profile({ navigation }) {
 
         try {
           const res = await axios.get(apiUrl(`/api/user/${loggedInUser._id}`));
-          if (isActive && res.data?._id) updateUser(res.data);
+          if (isActive && res.data?._id) {
+            // Only update if there are actual changes to prevent unnecessary re-renders
+            const hasChanges = JSON.stringify(res.data) !== JSON.stringify(loggedInUser);
+            if (hasChanges) {
+              updateUser(res.data);
+            }
+          }
         } catch (err) {
-          if (isActive) updateUser(loggedInUser);
+          // Don't update on error to prevent unnecessary re-renders
+          console.error('Error fetching user data:', err);
         }
       };
 
       fetchUser();
       return () => { isActive = false; };
-    }, [loggedInUser])
+    }, [loggedInUser?._id]) // Only depend on user ID
   );
 
   // Fetch user's discussions
@@ -64,7 +71,7 @@ export default function Profile({ navigation }) {
 
       setLoadingDiscussions(true);
       try {
-        const res = await axios.get(apiUrl(`/api/user/${loggedInUser._id}/discussions`));
+        const res = await axios.get(apiUrl(`/api/posts/user/${loggedInUser._id}/discussions`));
         setDiscussions(res.data || []);
       } catch (err) {
         console.error("Error fetching discussions:", err);
@@ -75,7 +82,7 @@ export default function Profile({ navigation }) {
     };
 
     fetchDiscussions();
-  }, [loggedInUser]);
+  }, [loggedInUser?._id]); // Only depend on the user ID, not the entire user object
 
   if (!loggedInUser) return <Text style={{ textAlign: 'center', marginTop: 20 }}>User not found</Text>;
 
@@ -184,28 +191,75 @@ export default function Profile({ navigation }) {
           <Text style={{ fontWeight: '600', color: 'white', fontSize: 16 }}>Support Tickets</Text>
         </TouchableOpacity>
 
-        {/* User Discussions */}
-        <View style={{ marginTop: 24 }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 12 }}>My Discussions</Text>
-          {loadingDiscussions ? (
-            <ActivityIndicator size="large" color="#1e90ff" />
-          ) : discussions.length === 0 ? (
-            <Text style={{ color: '#6b7280', textAlign: 'center', marginTop: 8 }}>You haven't posted any discussions yet.</Text>
-          ) : (
-            <FlatList
-              data={discussions}
-              keyExtractor={(item) => item._id}
-              renderItem={({ item }) => (
-                <View style={styles.discussionCard}>
-                  <Text style={styles.discussionTitle}>{item.title}</Text>
-                  <Text style={styles.discussionContent} numberOfLines={2}>{item.content}</Text>
-                  <Text style={styles.discussionDate}>{new Date(item.createdAt).toLocaleString()}</Text>
-                </View>
-              )}
-              scrollEnabled={false}
-            />
-          )}
-        </View>
+                 {/* User Discussions */}
+         <View style={{ marginTop: 24 }}>
+           <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 12 }}>My Discussions</Text>
+           {loadingDiscussions ? (
+             <ActivityIndicator size="large" color="#1e90ff" />
+           ) : discussions.length === 0 ? (
+             <Text style={{ color: '#6b7280', textAlign: 'center', marginTop: 8 }}>You haven't posted any discussions yet.</Text>
+           ) : (
+             <FlatList
+               data={discussions}
+               keyExtractor={(item) => item._id}
+               renderItem={({ item }) => (
+                 <TouchableOpacity
+                   style={styles.discussionCard}
+                   onPress={() => {
+                     if (navigation?.navigate) navigation.navigate('post-detail', { postId: item._id });
+                     else if (router?.push) router.push({ pathname: '/post-detail', params: { postId: item._id } });
+                     else if (typeof window !== 'undefined') window.location.href = `/post-detail?postId=${item._id}`;
+                   }}
+                 >
+                   {/* Discussion Header */}
+                   <View style={styles.discussionHeader}>
+                     <Text style={styles.discussionTitle}>{item.title}</Text>
+                     <Text style={styles.discussionDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                   </View>
+                   
+                   {/* Discussion Content */}
+                   <Text style={styles.discussionContent} numberOfLines={3}>
+                     {item.content}
+                   </Text>
+                   
+                   {/* Discussion Image if exists */}
+                   {item.image && (
+                     <Image
+                       source={{ uri: item.image.startsWith('http') ? item.image : apiUrl(item.image) }}
+                       style={styles.discussionImage}
+                       resizeMode="cover"
+                     />
+                   )}
+                   
+                   {/* Discussion Stats */}
+                   <View style={styles.discussionStats}>
+                     <View style={styles.statItem}>
+                       <Ionicons name="chatbubble-outline" size={16} color="#6b7280" />
+                       <Text style={styles.statText}>{item.commentCount || 0}</Text>
+                     </View>
+                     <View style={styles.statItem}>
+                       <Ionicons name="heart-outline" size={16} color="#6b7280" />
+                       <Text style={styles.statText}>{item.likeCount || 0}</Text>
+                     </View>
+                     <View style={styles.statItem}>
+                       <Ionicons name="eye-outline" size={16} color="#6b7280" />
+                       <Text style={styles.statText}>{item.viewCount || 0}</Text>
+                     </View>
+                   </View>
+                   
+                   {/* Location if exists */}
+                   {item.location && (
+                     <View style={styles.locationRow}>
+                       <Ionicons name="location-outline" size={14} color="#6b7280" />
+                       <Text style={styles.locationText}>{item.location}</Text>
+                     </View>
+                   )}
+                 </TouchableOpacity>
+               )}
+               scrollEnabled={false}
+             />
+           )}
+         </View>
 
       </ScrollView>
 
@@ -274,8 +328,76 @@ const styles = StyleSheet.create({
   cancelButtonText: { color: '#666', fontWeight: '600', fontSize: 16 },
   logoutButton: { backgroundColor: '#ef4444' },
   logoutButtonText: { color: 'white', fontWeight: '600', fontSize: 16 },
-  discussionCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
-  discussionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 4, color: '#111827' },
-  discussionContent: { fontSize: 14, color: '#6b7280' },
-  discussionDate: { fontSize: 12, color: '#9ca3af', marginTop: 6 }
+     discussionCard: { 
+     backgroundColor: '#fff', 
+     borderRadius: 12, 
+     padding: 16, 
+     marginBottom: 12, 
+     shadowColor: '#000', 
+     shadowOffset: { width: 0, height: 1 }, 
+     shadowOpacity: 0.05, 
+     shadowRadius: 3, 
+     elevation: 1 
+   },
+   discussionHeader: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'flex-start',
+     marginBottom: 8,
+   },
+   discussionTitle: { 
+     fontSize: 16, 
+     fontWeight: '600', 
+     color: '#111827',
+     flex: 1,
+     marginRight: 8
+   },
+   discussionDate: { 
+     fontSize: 12, 
+     color: '#9ca3af',
+     flexShrink: 0
+   },
+   discussionContent: { 
+     fontSize: 14, 
+     color: '#6b7280',
+     lineHeight: 20,
+     marginBottom: 12
+   },
+   discussionImage: {
+     width: '100%',
+     height: 120,
+     borderRadius: 8,
+     marginBottom: 12
+   },
+   discussionStats: {
+     flexDirection: 'row',
+     justifyContent: 'space-around',
+     paddingVertical: 8,
+     borderTopWidth: 1,
+     borderTopColor: '#f3f4f6',
+     marginBottom: 8
+   },
+   statItem: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 4
+   },
+   statText: {
+     fontSize: 12,
+     color: '#6b7280',
+     fontWeight: '500'
+   },
+   locationRow: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 4,
+     paddingTop: 8,
+     borderTopWidth: 1,
+     borderTopColor: '#f3f4f6'
+   },
+   locationText: {
+     fontSize: 12,
+     color: '#6b7280',
+     fontWeight: '500'
+   }
 });
