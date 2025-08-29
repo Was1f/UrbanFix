@@ -36,6 +36,8 @@ const userInfoRoutes = require('./routes/UserInfo');
 const locationRoutes = require('./routes/locations');
 const notificationRoutes = require('./routes/notifications'); // Add notification routes
 const ticketRoutes = require('./routes/tickets');
+const chatRoutes = require('./routes/chat'); // Chat routes
+
 
 
 // ===== Use Routes =====
@@ -53,6 +55,9 @@ app.use('/api', phoneAuthRoutes);
 app.use('/api/user', userInfoRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/notifications', notificationRoutes); // Add notification routes
+app.use('/api/chat', chatRoutes); // Chat routes
+
+
 
 // ===== Scheduled Tasks =====
 const NotificationService = require('./services/notificationService');
