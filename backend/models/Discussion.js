@@ -77,7 +77,7 @@ const DiscussionSchema = new mongoose.Schema({
   status: { 
     type: String, 
     default: 'active',
-    enum: ['active', 'flagged', 'removed', 'pending_review']
+    enum: ['active', 'flagged', 'removed', 'pending_review', 'approved', 'rejected']
   },
   isFlagged: { 
     type: Boolean, 
@@ -86,6 +86,19 @@ const DiscussionSchema = new mongoose.Schema({
   flagCount: { 
     type: Number, 
     default: 0 
+  },
+  adminNotes: { 
+    type: String 
+  },
+  reviewedBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Admin' 
+  },
+  reviewedAt: { 
+    type: Date 
+  },
+  reportContext: { 
+    type: String 
   },
 
     helpers: [{

@@ -272,7 +272,7 @@ export default function EmergencyContacts() {
       {/* Header */}
       <View style={styles.header}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
+          <Ionicons name="arrow-back" size={24} color="#6b7280" />
         </Pressable>
         <Text style={styles.headerTitle}>Emergency Contacts</Text>
         <View style={styles.headerRight} />
@@ -294,11 +294,13 @@ export default function EmergencyContacts() {
               ]}
               onPress={() => handleCategoryPress(category)}
             >
-              <Ionicons 
-                name={category.icon} 
-                size={32} 
-                color={category.color} 
-              />
+              <View style={styles.categoryIconWrap}>
+                <Ionicons 
+                  name={category.icon} 
+                  size={24} 
+                  color={category.color} 
+                />
+              </View>
               <Text style={[styles.categoryLabel, { color: category.color }]}>
                 {category.label}
               </Text>
@@ -326,7 +328,9 @@ export default function EmergencyContacts() {
                   <Text style={styles.contactPhone}>{contact.phoneNumber}</Text>
                   <Text style={styles.contactDescription}>{contact.description}</Text>
                 </View>
-                <Ionicons name="call-outline" size={24} color="#007AFF" />
+                <View style={styles.callButton}>
+                  <Ionicons name="call-outline" size={18} color="#10b981" />
+                </View>
               </Pressable>
             ))
           )}
@@ -347,8 +351,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
@@ -358,11 +362,13 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#111',
+    color: '#111827',
   },
   headerRight: {
     width: 40,
@@ -372,7 +378,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 16,
-    color: '#666',
+    color: '#6b7280',
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -386,31 +392,39 @@ const styles = StyleSheet.create({
   categoryButton: {
     width: '48%',
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
+  },
+  categoryIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   categoryLabel: {
     fontSize: 14,
     fontWeight: '600',
-    marginTop: 8,
+    marginTop: 10,
     textAlign: 'center',
   },
   contactCount: {
     fontSize: 12,
-    color: '#666',
+    color: '#6b7280',
     marginTop: 4,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111',
+    color: '#111827',
     marginBottom: 16,
   },
   contactsList: {
@@ -432,21 +446,31 @@ const styles = StyleSheet.create({
   contactName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111',
+    color: '#111827',
     marginBottom: 4,
   },
   contactPhone: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#2563eb',
     marginBottom: 2,
   },
   contactDescription: {
     fontSize: 12,
-    color: '#666',
+    color: '#6b7280',
   },
   loadingText: {
     textAlign: 'center',
-    color: '#666',
+    color: '#6b7280',
     fontSize: 16,
+  },
+  callButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

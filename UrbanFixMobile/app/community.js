@@ -12,6 +12,8 @@ import {
   Dimensions,
   SafeAreaView,
   Modal,
+  TouchableOpacity,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -329,15 +331,15 @@ const CommunityHome = () => {
       ]);
 
       setBoards(boardsData);
-      setDiscussions(discussionsData);
+      
+      // Filter out removed posts from community feed
+      const activeDiscussions = discussionsData.filter(disc => 
+        disc.status !== 'removed' && disc.status !== 'rejected'
+      );
+      setDiscussions(activeDiscussions);
 
-      const nextReported = {};
-      discussionsData.forEach((disc) => {
-        if (disc?.status === 'flagged') {
-          nextReported[disc._id] = true;
-        }
-      });
-      setReportedMap(nextReported);
+      // Check actual report status for each discussion
+      await checkReportStatuses(activeDiscussions);
       
       setError(null);
     } catch (err) {
@@ -347,6 +349,50 @@ const CommunityHome = () => {
       setLoading(false);
     }
   }, []);
+
+  // Function to check actual report status for discussions
+  const checkReportStatuses = async (discussions) => {
+    try {
+      setCheckingReportStatus(true);
+      const nextReported = {};
+      
+      // Check each discussion for pending reports
+      for (const discussion of discussions) {
+        try {
+          const response = await fetch(apiUrl(`/api/moderation/user/report/check?discussionId=${discussion._id}`), {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.hasPendingReport) {
+              nextReported[discussion._id] = true;
+            }
+          }
+        } catch (error) {
+          // If check fails, fall back to flagged status
+          if (discussion?.status === 'flagged') {
+            nextReported[discussion._id] = true;
+          }
+        }
+      }
+      
+      setReportedMap(nextReported);
+    } catch (error) {
+      console.error('Error checking report statuses:', error);
+      // Fallback to flagged status only
+      const nextReported = {};
+      discussions.forEach((disc) => {
+        if (disc?.status === 'flagged') {
+          nextReported[disc._id] = true;
+        }
+      });
+      setReportedMap(nextReported);
+    } finally {
+      setCheckingReportStatus(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -360,6 +406,15 @@ const CommunityHome = () => {
     useCallback(() => {
       fetchData();
     }, [fetchData])
+  );
+
+  // Refresh report statuses when user returns to community tab
+  useFocusEffect(
+    useCallback(() => {
+      if (discussions.length > 0) {
+        checkReportStatuses(discussions);
+      }
+    }, [discussions])
   );
 
   const handleBoardPress = (board) => {
@@ -410,7 +465,31 @@ const CommunityHome = () => {
     fetchData();
   };
 
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [selectedDiscussionForReport, setSelectedDiscussionForReport] = useState(null);
+  const [reportReason, setReportReason] = useState('Inappropriate Content');
+  const [reportContext, setReportContext] = useState('');
+  const [checkingReportStatus, setCheckingReportStatus] = useState(false);
+
+  const reportReasons = [
+    'Inappropriate Content',
+    'Spam', 
+    'Harassment',
+    'Misinformation',
+    'Hate Speech',
+    'Violence',
+    'Other'
+  ];
+
   const handleReport = async (discussionId) => {
+    // Show report modal instead of direct submission
+    setSelectedDiscussionForReport(discussionId);
+    setReportModalVisible(true);
+  };
+
+  const submitReport = async () => {
+    if (!selectedDiscussionForReport) return;
+    
     try {
       const response = await fetch(apiUrl('/api/moderation/user/report'), {
         method: 'POST',
@@ -418,8 +497,9 @@ const CommunityHome = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          discussionId,
-          reason: 'Inappropriate Content',
+          discussionId: selectedDiscussionForReport,
+          reason: reportReason,
+          context: reportContext,
           reporterUsername: 'Anonymous',
         }),
       });
@@ -428,16 +508,51 @@ const CommunityHome = () => {
 
       if (response.status === 201) {
         Alert.alert('Report submitted', 'Thanks! Our admins will review it shortly.');
-        setReportedMap((prev) => ({ ...prev, [discussionId]: true }));
+        // Refresh the actual status from backend
+        await refreshReportStatus(selectedDiscussionForReport);
+        // Close modal and reset form
+        setReportModalVisible(false);
+        setReportReason('Inappropriate Content');
+        setReportContext('');
+        setSelectedDiscussionForReport(null);
       } else if (response.status === 200) {
         Alert.alert('Already reported', 'This discussion is already pending review.');
-        setReportedMap((prev) => ({ ...prev, [discussionId]: true }));
+        // Refresh the actual status from backend
+        await refreshReportStatus(selectedDiscussionForReport);
+        // Close modal and reset form
+        setReportModalVisible(false);
+        setReportReason('Inappropriate Content');
+        setReportContext('');
+        setSelectedDiscussionForReport(null);
       } else {
         Alert.alert('Error', (data && data.message) || 'Failed to submit report');
       }
     } catch (error) {
       console.error('Error reporting:', error);
       Alert.alert('Error', 'Failed to submit report');
+    }
+  };
+
+  // Function to refresh report status for a specific discussion
+  const refreshReportStatus = async (discussionId) => {
+    try {
+      setCheckingReportStatus(true);
+      const response = await fetch(apiUrl(`/api/moderation/user/report/check?discussionId=${discussionId}`), {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setReportedMap((prev) => ({
+          ...prev,
+          [discussionId]: data.hasPendingReport
+        }));
+      }
+    } catch (error) {
+      console.error('Error refreshing report status:', error);
+    } finally {
+      setCheckingReportStatus(false);
     }
   };
 
@@ -458,9 +573,13 @@ const CommunityHome = () => {
         Alert.alert('Revoked', 'Your report has been revoked.');
       } else {
         Alert.alert('Error', (revokeData && revokeData.message) || 'Failed to revoke report');
+        // If revoke failed, refresh the status to see current state
+        await refreshReportStatus(discussionId);
       }
     } catch (e) {
       Alert.alert('Error', 'Failed to revoke report');
+      // If revoke failed, refresh the status to see current state
+      await refreshReportStatus(discussionId);
     }
   };
 
@@ -998,12 +1117,13 @@ const CommunityHome = () => {
                               const isReported = !!reportedMap[discussion._id];
                               isReported ? handleRevoke(discussion._id) : handleReport(discussion._id);
                             }}
+                            disabled={checkingReportStatus}
                           >
                             <Text style={[
                               styles.reportButtonText,
                               reportedMap[discussion._id] && styles.reportButtonTextReported
                             ]}>
-                              {reportedMap[discussion._id] ? '✓' : '⚠️'}
+                              {checkingReportStatus ? '⏳' : (reportedMap[discussion._id] ? '✓' : '⚠️')}
                             </Text>
                           </Pressable>
                         </View>
@@ -1027,6 +1147,78 @@ const CommunityHome = () => {
             )}
           </View>
         </View>
+
+        {/* Report Modal */}
+        <Modal
+          visible={reportModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setReportModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Report Post</Text>
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={() => setReportModalVisible(false)}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.modalSection}>
+                <Text style={styles.modalLabel}>Report Reason *</Text>
+                <View style={styles.reasonContainer}>
+                  {reportReasons.map((reason) => (
+                    <TouchableOpacity
+                      key={reason}
+                      style={[
+                        styles.reasonButton,
+                        reportReason === reason && styles.reasonButtonActive
+                      ]}
+                      onPress={() => setReportReason(reason)}
+                    >
+                      <Text style={[
+                        styles.reasonButtonText,
+                        reportReason === reason && styles.reasonButtonTextActive
+                      ]}>
+                        {reason}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              
+              <View style={styles.modalSection}>
+                <Text style={styles.modalLabel}>Additional Context (Optional)</Text>
+                <TextInput
+                  style={styles.contextInput}
+                  placeholder="Provide more details about your report..."
+                  value={reportContext}
+                  onChangeText={setReportContext}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+              
+              <View style={styles.modalActions}>
+                <TouchableOpacity 
+                  style={styles.modalCancelButton}
+                  onPress={() => setReportModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.modalSubmitButton}
+                  onPress={submitReport}
+                >
+                  <Text style={styles.modalSubmitButtonText}>Submit Report</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Create Post Button */}
         <Pressable 
@@ -1598,6 +1790,110 @@ const styles = StyleSheet.create({
   postCount: {
     color: '#94a3b8',
     fontSize: 12,
+  },
+
+  // Report Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  closeButtonText: {
+    fontSize: 20,
+    color: '#6b7280',
+  },
+  modalSection: {
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  reasonContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  reasonButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#fff',
+  },
+  reasonButtonActive: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  reasonButtonText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  reasonButtonTextActive: {
+    color: 'white',
+  },
+  contextInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    textAlignVertical: 'top',
+    minHeight: 80,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 15,
+    marginTop: 25,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  modalSubmitButton: {
+    flex: 1,
+    backgroundColor: '#dc2626',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalSubmitButtonText: {
+    fontSize: 16,
+    color: 'white',
+    fontWeight: '600',
   },
 });
 

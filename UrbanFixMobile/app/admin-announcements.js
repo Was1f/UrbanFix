@@ -102,6 +102,21 @@ export default function AdminAnnouncements() {
     setFilteredAnnouncements(filtered);
   };
 
+  const getActionButtonTextStyle = (action) => {
+    switch (action) {
+      case 'edit':
+        return { color: '#374151' };
+      case 'delete':
+        return { color: '#dc2626' };
+      case 'archive':
+        return { color: '#f59e0b' };
+      case 'restore':
+        return { color: '#10b981' };
+      default:
+        return { color: '#374151' };
+    }
+  };
+
   const handleDelete = async (announcementId) => {
     Alert.alert(
       'Delete Announcement',
@@ -266,16 +281,16 @@ export default function AdminAnnouncements() {
             style={[styles.actionButton, styles.restoreButton]}
             onPress={() => handleRestore(item._id)}
           >
-            <Ionicons name="refresh-outline" size={16} color="#fff" />
-            <Text style={styles.actionButtonText}>Restore</Text>
+            <Ionicons name="refresh-outline" size={16} color="#10b981" />
+            <Text style={[styles.actionButtonText, getActionButtonTextStyle('restore')]}>Restore</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={[styles.actionButton, styles.archiveButton]}
             onPress={() => handleArchive(item._id)}
           >
-            <Ionicons name="archive-outline" size={16} color="#fff" />
-            <Text style={styles.actionButtonText}>Archive</Text>
+            <Ionicons name="archive-outline" size={16} color="#f59e0b" />
+            <Text style={[styles.actionButtonText, getActionButtonTextStyle('archive')]}>Archive</Text>
           </TouchableOpacity>
         )}
         
@@ -283,16 +298,16 @@ export default function AdminAnnouncements() {
           style={[styles.actionButton, styles.editButton]}
           onPress={() => router.push(`/admin-edit-announcement?id=${item._id}`)}
         >
-          <Ionicons name="create-outline" size={16} color="#fff" />
-          <Text style={styles.actionButtonText}>Edit</Text>
+          <Ionicons name="create-outline" size={16} color="#374151" />
+          <Text style={[styles.actionButtonText, getActionButtonTextStyle('edit')]}>Edit</Text>
         </TouchableOpacity>
         
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
           onPress={() => handleDelete(item._id)}
         >
-          <Ionicons name="trash-outline" size={16} color="#fff" />
-          <Text style={styles.actionButtonText}>Delete</Text>
+          <Ionicons name="trash-outline" size={16} color="#dc2626" />
+          <Text style={[styles.actionButtonText, getActionButtonTextStyle('delete')]}>Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -346,13 +361,13 @@ export default function AdminAnnouncements() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#111" />
+            <Ionicons name="arrow-back" size={24} color="#6b7280" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Manage Announcements</Text>
           <View style={styles.headerRight} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
+          <ActivityIndicator size="large" color="#6366f1" />
           <Text style={styles.loadingText}>Loading announcements...</Text>
         </View>
       </SafeAreaView>
@@ -416,10 +431,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
@@ -427,19 +441,23 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#111',
+    color: '#111827',
+    marginBottom: 2,
   },
   headerRight: {
     width: 40,
   },
   addButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#6366f1',
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -454,7 +472,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
   },
   searchBar: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#f9fafb',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -467,7 +485,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#111',
+    color: '#111827',
   },
   filterTabs: {
     flexDirection: 'row',
@@ -483,7 +501,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   filterTabActive: {
-    borderBottomColor: '#3b82f6',
+    borderBottomColor: '#6366f1',
   },
   filterTabText: {
     fontSize: 14,
@@ -491,7 +509,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   filterTabTextActive: {
-    color: '#3b82f6',
+    color: '#6366f1',
     fontWeight: '600',
   },
   loadingContainer: {
@@ -513,13 +531,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -533,13 +551,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statusBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   statusText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
@@ -554,9 +572,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   titleText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
     marginBottom: 8,
   },
   timeContainer: {
@@ -594,7 +612,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    borderTopColor: '#e5e7eb',
     paddingTop: 12,
   },
   actionButton: {
@@ -604,25 +622,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     gap: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   actionButtonText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+    textAlign: 'center',
   },
   editButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
   },
   deleteButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
   },
   archiveButton: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#fef7f0',
+    borderColor: '#fed7aa',
   },
   restoreButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
   },
   emptyContainer: {
     flex: 1,

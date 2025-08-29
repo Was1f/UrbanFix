@@ -9,26 +9,42 @@ import { apiUrl } from '../constants/api';
 import DiscussionCard from '../components/DiscussionCard';
 
 export default function ViewPublicProfile() {
-  const { identifier } = useLocalSearchParams();
+  console.log('ViewPublicProfile component rendered');
+  
+  const params = useLocalSearchParams();
   const router = useRouter();
+  
+  console.log('ViewPublicProfile params:', params);
+  
+  const { identifier, from } = params;
   
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isFromAdmin, setIsFromAdmin] = useState(false);
 
   // NEW states for discussions
   const [discussions, setDiscussions] = useState([]);
   const [loadingDiscussions, setLoadingDiscussions] = useState(true);
 
   useEffect(() => {
+    console.log('ViewPublicProfile useEffect - identifier:', identifier, 'from:', from);
+    
     if (!identifier) {
       setLoading(false);
       return;
     }
 
+    // Check if user came from admin section
+    setIsFromAdmin(from === 'admin');
+    console.log('isFromAdmin set to:', from === 'admin');
+
     const fetchProfile = async () => {
       try {
         console.log('Fetching profile for identifier:', identifier);
-        const res = await fetch(apiUrl(`/api/user/profile/${identifier}`));
+        const apiEndpoint = apiUrl(`/api/user/profile/${identifier}`);
+        console.log('API endpoint:', apiEndpoint);
+        
+        const res = await fetch(apiEndpoint);
         const data = await res.json();
 
         console.log('Profile fetch response:', { status: res.status, data });
@@ -75,7 +91,13 @@ export default function ViewPublicProfile() {
         <View style={styles.header}>
           <Pressable
             style={styles.backButton}
-            onPress={() => router.push('/community')}
+            onPress={() => {
+              if (isFromAdmin) {
+                router.push('/admin-users');
+              } else {
+                router.push('/community');
+              }
+            }}
           >
             <Text style={styles.backIcon}>←</Text>
           </Pressable>
@@ -96,7 +118,13 @@ export default function ViewPublicProfile() {
         <View style={styles.header}>
           <Pressable
             style={styles.backButton}
-            onPress={() => router.push('/community')}
+            onPress={() => {
+              if (isFromAdmin) {
+                router.push('/admin-users');
+              } else {
+                router.push('/community');
+              }
+            }}
           >
             <Text style={styles.backIcon}>←</Text>
           </Pressable>
@@ -118,7 +146,13 @@ export default function ViewPublicProfile() {
         <View style={styles.header}>
           <Pressable
             style={styles.backButton}
-            onPress={() => router.push('/community')}
+            onPress={() => {
+              if (isFromAdmin) {
+                router.push('/admin-users');
+              } else {
+                router.push('/community');
+              }
+            }}
           >
             <Text style={styles.backIcon}>←</Text>
           </Pressable>
@@ -172,7 +206,13 @@ export default function ViewPublicProfile() {
       <View style={styles.header}>
         <Pressable
           style={styles.backButton}
-          onPress={() => router.push('/community')}
+          onPress={() => {
+            if (isFromAdmin) {
+              router.push('/admin-users');
+            } else {
+              router.push('/community');
+            }
+          }}
         >
           <Text style={styles.backIcon}>←</Text>
         </Pressable>
@@ -225,7 +265,13 @@ export default function ViewPublicProfile() {
           {/* Stats Section */}
           <View style={styles.statsSection}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{profile.points?.total || profile.points || 0}</Text>
+              <Text style={styles.statNumber}>
+                {typeof profile.points === 'object' && profile.points?.total 
+                  ? profile.points.total 
+                  : typeof profile.points === 'number' 
+                    ? profile.points 
+                    : 0}
+              </Text>
               <Text style={styles.statLabel}>Points</Text>
             </View>
           </View>

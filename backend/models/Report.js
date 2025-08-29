@@ -13,6 +13,9 @@ const ReportSchema = new mongoose.Schema({
     required: true,
     enum: ['Inappropriate Content', 'Spam', 'Harassment', 'Misinformation', 'Hate Speech', 'Violence', 'Other']
   },
+  context: { 
+    type: String 
+  },
   reporterUsername: { 
     type: String, 
     default: 'Anonymous' 

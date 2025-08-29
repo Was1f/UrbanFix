@@ -98,17 +98,171 @@ router.post('/login', async (req, res) => {
 // Get admin profile (protected route)
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
+    const admin = await Admin.findById(req.admin._id).select('-password');
     res.json({
-      admin: {
-        id: req.admin._id,
-        username: req.admin.username,
-        email: req.admin.email,
-        role: req.admin.role
-      }
+      message: 'Profile retrieved successfully',
+      admin
     });
   } catch (error) {
-    console.error('Get profile error:', error);
+    console.error('Error fetching admin profile:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get comprehensive admin dashboard stats
+router.get('/dashboard/stats', authenticateToken, async (req, res) => {
+  try {
+    // Import required models
+    const User = require('../models/User');
+    const Discussion = require('../models/Discussion');
+    const Ticket = require('../models/Ticket');
+    const Announcement = require('../models/Announcement');
+    const Report = require('../models/Report');
+    const EmergencyReport = require('../models/EmergencyReport');
+
+    // Get current date and calculate date ranges
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const thisWeek = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000));
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    // User statistics
+    const totalUsers = await User.countDocuments();
+    const newUsersToday = await User.countDocuments({ createdAt: { $gte: today } });
+    const newUsersThisWeek = await User.countDocuments({ createdAt: { $gte: thisWeek } });
+    const newUsersThisMonth = await User.countDocuments({ createdAt: { $gte: thisMonth } });
+    const verifiedUsers = await User.countDocuments({ 'verificationBadge.isVerified': true });
+    const bannedUsers = await User.countDocuments({ isBanned: true });
+
+    // Discussion/Post statistics
+    const totalPosts = await Discussion.countDocuments();
+    const postsToday = await Discussion.countDocuments({ createdAt: { $gte: today } });
+    const postsThisWeek = await Discussion.countDocuments({ createdAt: { $gte: thisWeek } });
+    const postsThisMonth = await Discussion.countDocuments({ createdAt: { $gte: thisMonth } });
+    const activePosts = await Discussion.countDocuments({ status: { $in: ['active', 'approved'] } });
+    const pendingPosts = await Discussion.countDocuments({ status: 'pending' });
+    const removedPosts = await Discussion.countDocuments({ status: 'removed' });
+
+    // Ticket statistics
+    const totalTickets = await Ticket.countDocuments();
+    const openTickets = await Ticket.countDocuments({ status: 'open' });
+    const resolvedTickets = await Ticket.countDocuments({ status: 'resolved' });
+    const ticketsToday = await Ticket.countDocuments({ createdAt: { $gte: today } });
+    const ticketsThisWeek = await Ticket.countDocuments({ createdAt: { $gte: thisWeek } });
+
+    // Announcement statistics
+    const totalAnnouncements = await Announcement.countDocuments();
+    const activeAnnouncements = await Announcement.countDocuments({ isArchived: false });
+    const archivedAnnouncements = await Announcement.countDocuments({ isArchived: true });
+    const announcementsToday = await Announcement.countDocuments({ createdAt: { $gte: today } });
+
+    // Report statistics
+    const totalReports = await Report.countDocuments();
+    const pendingReports = await Report.countDocuments({ status: 'pending' });
+    const resolvedReports = await Report.countDocuments({ status: { $in: ['approved', 'rejected', 'removed'] } });
+
+    // Emergency report statistics
+    const totalEmergencyReports = await EmergencyReport.countDocuments();
+    const emergencyReportsToday = await EmergencyReport.countDocuments({ createdAt: { $gte: today } });
+    const emergencyReportsThisWeek = await EmergencyReport.countDocuments({ createdAt: { $gte: thisWeek } });
+
+    // User engagement metrics
+    const topUsers = await User.aggregate([
+      { $sort: { 'points.total': -1 } },
+      { $limit: 5 },
+      { $project: { 
+        username: 1,
+        phone: 1,
+        profilePic: 1,
+        'points.total': 1, 
+        'stats.postsCreated': 1,
+        'stats.commentsAdded': 1
+      }}
+    ]);
+
+    // Recent activity
+    const recentPosts = await Discussion.find({})
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('title author createdAt status');
+
+    const recentTickets = await Ticket.find({})
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('subject status priority createdAt');
+
+    // Growth trends
+    const userGrowth = {
+      today: newUsersToday,
+      thisWeek: newUsersThisWeek,
+      thisMonth: newUsersThisMonth,
+      total: totalUsers
+    };
+
+    const postGrowth = {
+      today: postsToday,
+      thisWeek: postsThisWeek,
+      thisMonth: postsThisMonth,
+      total: totalPosts
+    };
+
+    const ticketGrowth = {
+      today: ticketsToday,
+      thisWeek: ticketsThisWeek,
+      total: totalTickets
+    };
+
+    res.json({
+      success: true,
+      stats: {
+        users: {
+          total: totalUsers,
+          verified: verifiedUsers,
+          banned: bannedUsers,
+          growth: userGrowth
+        },
+        posts: {
+          total: totalPosts,
+          active: activePosts,
+          pending: pendingPosts,
+          removed: removedPosts,
+          growth: postGrowth
+        },
+        tickets: {
+          total: totalTickets,
+          open: openTickets,
+          resolved: resolvedTickets,
+          growth: ticketGrowth
+        },
+        announcements: {
+          total: totalAnnouncements,
+          active: activeAnnouncements,
+          archived: archivedAnnouncements,
+          today: announcementsToday
+        },
+        reports: {
+          total: totalReports,
+          pending: pendingReports,
+          resolved: resolvedReports
+        },
+        emergencyReports: {
+          total: totalEmergencyReports,
+          today: emergencyReportsToday,
+          thisWeek: emergencyReportsThisWeek
+        },
+        topUsers,
+        recentPosts,
+        recentTickets
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching admin dashboard stats:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error fetching dashboard statistics' 
+    });
   }
 });
 

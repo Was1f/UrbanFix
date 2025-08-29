@@ -61,7 +61,16 @@ export default function ModerationPanel() {
 
   const fetchReports = async (authToken) => {
     try {
-      const response = await fetch(apiUrl(`/api/moderation/admin/reports?status=${selectedStatus}`), {
+      let endpoint;
+      if (selectedStatus === 'pending') {
+        // For pending, fetch reports that need review
+        endpoint = `/api/moderation/admin/reports?status=pending`;
+      } else {
+        // For approved/rejected/removed, fetch discussions with those statuses
+        endpoint = `/api/admin/discussions?status=${selectedStatus}`;
+      }
+
+      const response = await fetch(apiUrl(endpoint), {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
@@ -70,14 +79,30 @@ export default function ModerationPanel() {
 
       if (response.ok) {
         const data = await response.json();
-        setReports(data.reports || []);
+        if (selectedStatus === 'pending') {
+          setReports(data.reports || []);
+        } else {
+          // Convert discussions to report-like format for display
+          const discussionReports = (data.discussions || []).map(discussion => ({
+            _id: discussion._id,
+            reason: discussion.adminNotes || 'No reason provided',
+            status: discussion.status,
+            createdAt: discussion.reviewedAt || discussion.createdAt,
+            discussionId: discussion,
+            reporterUsername: discussion.reviewedBy ? 'Admin' : 'System',
+            reportedUserId: discussion.authorPhone,
+            reportedUsername: discussion.author,
+            context: discussion.reportContext // Include the report context
+          }));
+          setReports(discussionReports);
+        }
       } else if (response.status === 401) {
         await handleSessionExpired();
         return;
       }
     } catch (error) {
-      console.error('Error fetching reports:', error);
-      Alert.alert('Error', 'Failed to load reports');
+      console.error('Error fetching data:', error);
+      Alert.alert('Error', 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -199,13 +224,13 @@ export default function ModerationPanel() {
   const getActionButtonStyle = (action) => {
     switch (action) {
       case 'approved':
-        return { backgroundColor: '#059669' };
+        return { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' };
       case 'rejected':
-        return { backgroundColor: '#d97706' };
+        return { backgroundColor: '#fef7f0', borderColor: '#fed7aa' };
       case 'removed':
-        return { backgroundColor: '#dc2626' };
+        return { backgroundColor: '#fef2f2', borderColor: '#fecaca' };
       default:
-        return { backgroundColor: '#3b82f6' };
+        return { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' };
     }
   };
 
@@ -219,6 +244,19 @@ export default function ModerationPanel() {
         return '🗑️ Remove';
       default:
         return action;
+    }
+  };
+
+  const getActionButtonTextStyle = (action) => {
+    switch (action) {
+      case 'approved':
+        return { color: '#10b981' };
+      case 'rejected':
+        return { color: '#f59e0b' };
+      case 'removed':
+        return { color: '#dc2626' };
+      default:
+        return { color: '#374151' };
     }
   };
 
@@ -255,16 +293,20 @@ export default function ModerationPanel() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backButton}>← Back</Text>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Moderation Panel</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.headerCenter}>
+            <Text style={styles.title}>
+              {selectedStatus === 'pending' ? 'Moderation Panel' : `${selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1)} Posts`}
+            </Text>
+          </View>
+          <View style={styles.headerSpacer} />
         </View>
 
         {/* Status Tabs */}
         <View style={styles.tabs}>
-          {['pending', 'flagged', 'urgent', 'resolved'].map((status) => (
+          {['pending', 'approved', 'rejected', 'removed'].map((status) => (
             <TouchableOpacity
               key={status}
               style={[styles.tab, selectedStatus === status && styles.activeTab]}
@@ -280,7 +322,12 @@ export default function ModerationPanel() {
         <ScrollView style={styles.content}>
           {reports.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No {selectedStatus} reports</Text>
+              <Text style={styles.emptyStateText}>
+                {selectedStatus === 'pending' 
+                  ? `No ${selectedStatus} reports` 
+                  : `No ${selectedStatus} posts`
+                }
+              </Text>
             </View>
           ) : (
             reports.map((report) => (
@@ -323,6 +370,20 @@ export default function ModerationPanel() {
                         {report.reporterUsername || 'Anonymous'}
                       </Text>
                     </View>
+
+                    {/* Additional Context Section */}
+                    {report.context ? (
+                      <View style={styles.contextSection}>
+                        <Text style={styles.contextLabel}>Additional Context:</Text>
+                        <Text style={styles.contextText}>
+                          {report.context}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.noContextSection}>
+                        <Text style={styles.noContextText}>No additional context provided</Text>
+                      </View>
+                    )}
                   </View>
 
                 {/* User Information for Banning */}
@@ -340,32 +401,32 @@ export default function ModerationPanel() {
 
                 {/* Action Buttons */}
                 <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, getActionButtonStyle('approved')]}
-                    onPress={() => takeAction(report._id, 'approved')}
-                  >
-                    <Text style={styles.actionButtonText}>
-                      {getActionButtonText('approved')}
-                    </Text>
-                  </TouchableOpacity>
+                                     <TouchableOpacity
+                     style={[styles.actionButton, getActionButtonStyle('approved')]}
+                     onPress={() => takeAction(report._id, 'approved')}
+                   >
+                     <Text style={[styles.actionButtonText, getActionButtonTextStyle('approved')]}>
+                       {getActionButtonText('approved')}
+                     </Text>
+                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.actionButton, getActionButtonStyle('rejected')]}
-                    onPress={() => takeAction(report._id, 'rejected')}
-                  >
-                    <Text style={styles.actionButtonText}>
-                      {getActionButtonText('rejected')}
-                    </Text>
-                  </TouchableOpacity>
+                   <TouchableOpacity
+                     style={[styles.actionButton, getActionButtonStyle('rejected')]}
+                     onPress={() => takeAction(report._id, 'rejected')}
+                   >
+                     <Text style={[styles.actionButtonText, getActionButtonTextStyle('rejected')]}>
+                       {getActionButtonText('rejected')}
+                     </Text>
+                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.actionButton, getActionButtonStyle('removed')]}
-                    onPress={() => takeAction(report._id, 'removed')}
-                  >
-                    <Text style={styles.actionButtonText}>
-                      {getActionButtonText('removed')}
-                    </Text>
-                  </TouchableOpacity>
+                   <TouchableOpacity
+                     style={[styles.actionButton, getActionButtonStyle('removed')]}
+                     onPress={() => takeAction(report._id, 'removed')}
+                     >
+                     <Text style={[styles.actionButtonText, getActionButtonTextStyle('removed')]}>
+                       {getActionButtonText('removed')}
+                     </Text>
+                   </TouchableOpacity>
 
                   {/* Ban User Button - Show for all reports */}
                   <TouchableOpacity
@@ -489,76 +550,85 @@ export default function ModerationPanel() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f9f9f9',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f9f9f9',
   },
   loadingText: {
-    marginTop: 20,
-    fontSize: 18,
-    color: '#1e293b',
-    fontWeight: '600',
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '500',
     textAlign: 'center',
   },
   loadingSubtext: {
     marginTop: 8,
     fontSize: 14,
-    color: '#64748b',
+    color: '#6b7280',
     fontWeight: '400',
     textAlign: 'center',
   },
   loadingCard: {
-    backgroundColor: 'white',
-    padding: 40,
-    borderRadius: 20,
+    backgroundColor: '#fff',
+    padding: 32,
+    borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-    elevation: 4,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderColor: '#e5e7eb',
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 2,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
   backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  backButtonText: {
     fontSize: 18,
-    color: '#3b82f6',
+    color: '#6b7280',
     fontWeight: '600',
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#eff6ff',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    letterSpacing: -0.5,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  headerSpacer: {
+    width: 40,
   },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    paddingHorizontal: 20,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#e5e7eb',
   },
   tab: {
     flex: 1,
@@ -567,71 +637,69 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#f9fafb',
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: '#e5e7eb',
   },
   activeTab: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-    shadowColor: '#3b82f6',
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+    shadowColor: '#6366f1',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
   },
   tabText: {
     fontSize: 14,
-    color: '#64748b',
+    color: '#6b7280',
     fontWeight: '600',
   },
   activeTabText: {
-    color: 'white',
+    color: '#fff',
     fontWeight: '700',
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
   emptyState: {
     alignItems: 'center',
-    padding: 60,
-    backgroundColor: 'white',
-    borderRadius: 16,
-    margin: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    margin: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  emptyStateText: {
+    color: '#6b7280',
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  reportCard: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 2,
   },
-  emptyStateText: {
-    color: '#64748b',
-    fontSize: 18,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  reportCard: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-  },
   reportHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 16,
+    marginBottom: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#e5e7eb',
   },
   reportReasonContainer: {
     flex: 1,
@@ -640,11 +708,11 @@ const styles = StyleSheet.create({
   reportReason: {
     backgroundColor: '#fef2f2',
     color: '#dc2626',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    fontSize: 12,
-    fontWeight: '700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: 11,
+    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     alignSelf: 'flex-start',
@@ -653,89 +721,89 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   reportTime: {
-    fontSize: 13,
-    color: '#64748b',
+    fontSize: 12,
+    color: '#6b7280',
     fontWeight: '500',
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 10,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 6,
     textAlign: 'center',
   },
   statusIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f8fafc',
-    borderRadius: 20,
+    marginBottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
     alignSelf: 'flex-start',
   },
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#475569',
+    color: '#6b7280',
     textTransform: 'capitalize',
   },
   reportContent: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   reportTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 8,
-    lineHeight: 24,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 6,
+    lineHeight: 22,
   },
   reportDescription: {
-    fontSize: 15,
-    color: '#475569',
-    marginBottom: 16,
-    lineHeight: 22,
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 12,
+    lineHeight: 20,
   },
   authorSection: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
   authorLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#64748b',
+    color: '#6b7280',
     marginRight: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   reportAuthor: {
-    fontSize: 15,
-    color: '#475569',
+    fontSize: 13,
+    color: '#6b7280',
     fontWeight: '600',
     flex: 1,
   },
   reporterSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     backgroundColor: '#fef7f0',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
     borderLeftWidth: 3,
     borderLeftColor: '#f59e0b',
   },
   reporterLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#92400e',
     marginRight: 8,
@@ -750,74 +818,107 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
+    gap: 8,
+    marginBottom: 16,
     flexWrap: 'wrap',
   },
   actionButton: {
-    flex: 1,
-    minWidth: 80,
-    paddingVertical: 14,
-    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: '#e5e7eb',
+    minWidth: 80,
   },
   actionButtonText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
     textAlign: 'center',
   },
   banButton: {
-    backgroundColor: '#dc2626',
-    borderColor: '#dc2626',
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
   },
   banButtonText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
+    color: '#dc2626',
   },
   notesInput: {
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 15,
-    backgroundColor: '#f8fafc',
-    color: '#1e293b',
-    minHeight: 100,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    backgroundColor: '#f9fafb',
+    color: '#111827',
+    minHeight: 80,
     textAlignVertical: 'top',
   },
   // User info section styles
   userInfoSection: {
     backgroundColor: '#f0f9ff',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 16,
-    marginBottom: 16,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#bae6fd',
   },
   userInfoTitle: {
-    fontWeight: '700',
-    fontSize: 15,
+    fontWeight: '600',
+    fontSize: 13,
     color: '#0369a1',
-    marginBottom: 8,
+    marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   userInfoText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#0c4a6e',
     marginBottom: 4,
     fontWeight: '500',
+  },
+  // Context section styles
+  contextSection: {
+    backgroundColor: '#fef3c7',
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+  },
+  contextLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  contextText: {
+    fontSize: 12,
+    color: '#78350f',
+    lineHeight: 16,
+    fontStyle: 'italic',
+  },
+  // No context styles
+  noContextSection: {
+    backgroundColor: '#f3f4f6',
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  noContextText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   // Modal styles
   modalOverlay: {
@@ -832,126 +933,128 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 24,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
     margin: 20,
     width: '90%',
-    maxWidth: 420,
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 8,
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
     color: '#dc2626',
-    letterSpacing: -0.5,
   },
   modalSubtitle: {
-    fontSize: 17,
+    fontSize: 15,
     textAlign: 'center',
-    marginBottom: 24,
-    color: '#475569',
+    marginBottom: 20,
+    color: '#6b7280',
     fontWeight: '500',
   },
   modalWarning: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     color: '#dc2626',
     backgroundColor: '#fef2f2',
-    padding: 16,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#fecaca',
     fontWeight: '500',
   },
   inputLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 10,
-    color: '#1e293b',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#111827',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   modalInput: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-    fontSize: 15,
-    minHeight: 100,
-    color: '#1e293b',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    fontSize: 14,
+    minHeight: 80,
+    color: '#111827',
     textAlignVertical: 'top',
   },
   durationButtons: {
     flexDirection: 'row',
-    marginBottom: 24,
-    gap: 12,
+    marginBottom: 20,
+    gap: 8,
   },
   durationButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f9fafb',
   },
   durationButtonActive: {
     borderColor: '#dc2626',
     backgroundColor: '#dc2626',
     shadowColor: '#dc2626',
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 1,
   },
   durationButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#64748b',
+    color: '#6b7280',
   },
   durationButtonTextActive: {
-    color: 'white',
-    fontWeight: '700',
+    color: '#fff',
+    fontWeight: '600',
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
   modalButton: {
     flex: 1,
-    padding: 18,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   cancelButton: {
-    backgroundColor: '#64748b',
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
   },
   confirmButton: {
     backgroundColor: '#dc2626',
+    borderColor: '#dc2626',
   },
   cancelButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 13,
   },
   confirmButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });

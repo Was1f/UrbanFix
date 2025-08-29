@@ -48,6 +48,7 @@ router.get('/admin/reports', authenticateToken, async (req, res) => {
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
 
+
     const total = await Report.countDocuments(query);
 
     res.json({
@@ -108,20 +109,48 @@ router.post('/admin/reports/:id/action', authenticateToken, async (req, res) => 
     // Update discussion based on action
     switch (action) {
       case 'approved':
-        discussion.status = 'active';
+        discussion.status = 'approved';
         discussion.isFlagged = false;
+        discussion.adminNotes = notes;
+        discussion.reviewedBy = req.admin._id;
+        discussion.reviewedAt = new Date();
+        // Store the original report context for reference
+        if (report.context) {
+          discussion.reportContext = report.context;
+        }
         break;
       case 'rejected':
-        discussion.status = 'active';
+        discussion.status = 'rejected';
         discussion.isFlagged = false;
+        discussion.adminNotes = notes;
+        discussion.reviewedBy = req.admin._id;
+        discussion.reviewedAt = new Date();
+        // Store the original report context for reference
+        if (report.context) {
+          discussion.reportContext = report.context;
+        }
         break;
       case 'removed':
         discussion.status = 'removed';
         discussion.isFlagged = false;
+        discussion.adminNotes = notes;
+        discussion.reviewedBy = req.admin._id;
+        discussion.reviewedAt = new Date();
+        // Store the original report context for reference
+        if (report.context) {
+          discussion.reportContext = report.context;
+        }
         break;
       case 'resolved':
         discussion.status = 'active';
         discussion.isFlagged = false;
+        discussion.adminNotes = notes;
+        discussion.reviewedBy = req.admin._id;
+        discussion.reviewedAt = new Date();
+        // Store the original report context for reference
+        if (report.context) {
+          discussion.reportContext = report.context;
+        }
         break;
     }
 
@@ -236,7 +265,9 @@ router.get('/admin/stats', authenticateToken, async (req, res) => {
 // Report a discussion (for users - PUBLIC ROUTE)
 router.post('/user/report', async (req, res) => {
   try {
-    const { discussionId, reason, reporterUsername = 'Anonymous', reportedUserId } = req.body;
+    const { discussionId, reason, context, reporterUsername = 'Anonymous', reportedUserId } = req.body;
+    
+
 
     if (!discussionId || !reason) {
       return res.status(400).json({ message: 'Discussion ID and reason are required' });
@@ -263,6 +294,7 @@ router.post('/user/report', async (req, res) => {
     const report = new Report({
       discussionId,
       reason,
+      context, // Add the context field
       reporterUsername,
       reportedUserId: reportedUserId || null, // Add user ID if provided
       reportedUsername: discussion.author || 'Anonymous' // Use discussion author as reported username
@@ -284,6 +316,25 @@ router.post('/user/report', async (req, res) => {
   } catch (error) {
     console.error('Error creating report:', error);
     res.status(500).json({ message: 'Error creating report' });
+  }
+});
+
+// Check if a discussion has a pending report (PUBLIC ROUTE)
+router.get('/user/report/check', async (req, res) => {
+  try {
+    const { discussionId } = req.query;
+
+    if (!discussionId) {
+      return res.status(400).json({ message: 'Discussion ID is required' });
+    }
+
+    const pendingReport = await Report.findOne({ discussionId, status: 'pending' });
+    const hasPendingReport = !!pendingReport;
+
+    res.json({ hasPendingReport });
+  } catch (error) {
+    console.error('Error checking report status:', error);
+    res.status(500).json({ message: 'Error checking report status' });
   }
 });
 

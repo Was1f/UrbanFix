@@ -14,6 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import SessionManager from '../utils/sessionManager';
 import ProtectedRoute from '../components/ProtectedRoute';
 import { apiUrl } from '../constants/api';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function AdminUserDetail() {
   const router = useRouter();
@@ -596,6 +597,33 @@ export default function AdminUserDetail() {
                   <Text style={styles.banButtonText}>Ban User</Text>
                 </TouchableOpacity>
               )}
+              {/* View Profile Button */}
+              <TouchableOpacity 
+                style={styles.viewProfileButton}
+                onPress={() => {
+                  console.log('Navigating to profile with:', { phone: user.phone, from: 'admin' });
+                  try {
+                    // Try object-based navigation first
+                    router.push({
+                      pathname: '/ViewPublicProfile',
+                      params: { identifier: user.phone, from: 'admin' }
+                    });
+                  } catch (error) {
+                    console.error('Navigation error:', error);
+                    // Fallback to string-based navigation
+                    try {
+                      router.push(`/ViewPublicProfile?identifier=${user.phone}&from=admin`);
+                    } catch (fallbackError) {
+                      console.error('Fallback navigation also failed:', fallbackError);
+                      // Last resort - try without params
+                      router.push('/ViewPublicProfile');
+                    }
+                  }
+                }}
+              >
+                <Ionicons name="person-outline" size={20} color="white" style={{ marginRight: 8 }} />
+                <Text style={styles.viewProfileButtonText}>View Public Profile</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
@@ -862,6 +890,21 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     fontSize: 16,
     color: 'white',
+    fontWeight: '600',
+  },
+  viewProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1e90ff',
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1e90ff',
+  },
+  viewProfileButtonText: {
+    color: 'white',
+    fontSize: 16,
     fontWeight: '600',
   },
 });
