@@ -3,6 +3,8 @@ const router = express.Router();
 const User = require('../models/User');
 
 const Board = require('../models/Board');
+const mongoose = require('mongoose');
+
 
 // Get available locations (boards + "Others" option)
 router.get('/locations', async (req, res) => {
@@ -16,7 +18,52 @@ router.get('/locations', async (req, res) => {
   }
 });
 
-// Create new user
+// Public profile view (by ID, phone, or email)
+
+router.get('/profile/:identifier', async (req, res) => {
+  const { identifier } = req.params;
+  let query = {};
+
+  try {
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+      // Handle MongoDB _id
+      query = { _id: new mongoose.Types.ObjectId(identifier) };
+    } else if (/^\d{5,}$/.test(identifier)) {
+      // Handle phone (any number, at least 5 digits to avoid conflict with short IDs)
+      query = { phone: identifier };
+    } else if (/^\S+@\S+\.\S+$/.test(identifier)) {
+      // Handle email
+      query = { email: identifier };
+    } else {
+      return res.status(400).json({ message: 'Invalid identifier format' });
+    }
+
+    console.log('Searching user with:', query);
+
+    const user = await User.findOne(query).select(
+      'fname lname verificationBadge profession location points'
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({
+      name: `${user.fname} ${user.lname}`,
+      verificationBadge: user.verificationBadge || false,
+      profession: user.profession || 'Not specified',
+      location: user.location || 'Unknown',
+      points: user.points || 0,
+      _id: user._id
+    });
+  } catch (err) {
+    console.error('Public profile fetch error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+// ===== Create new user =====
 router.post('/', async (req, res) => {
   const { fname, lname, phone, email, address, profession, gender, location } = req.body;
 
@@ -28,7 +75,6 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    // Check if phone already exists
     const existingUser = await User.findOne({ phone });
     if (existingUser) {
       return res.status(409).json({ 
@@ -37,7 +83,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Create new user
     const newUser = new User({
       fname,
       lname,
@@ -46,7 +91,7 @@ router.post('/', async (req, res) => {
       address,
       profession,
       gender,
-      location: location || 'Dhanmondi' // Default to Dhanmondi if not provided
+      location: location || 'Dhanmondi'
     });
 
     const savedUser = await newUser.save();
@@ -65,7 +110,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Get user profile by ID
+// ===== Get user profile by ID (private route) =====
 router.get('/:id', async (req, res) => {
   const userId = req.params.id;
   try {
@@ -77,7 +122,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Upload NID & verification (with name & dob)
+// ===== Upload NID & verification =====
 router.patch('/:id/nid', async (req, res) => {
   const userId = req.params.id;
   const { nid, name, dob } = req.body;
@@ -99,48 +144,28 @@ router.patch('/:id/nid', async (req, res) => {
   }
 });
 
-
-// Update profile picture
+// ===== Update profile picture =====
 router.patch('/:id/profile-pic', async (req, res) => {
   const userId = req.params.id;
   const { profilePic } = req.body;
-  
+
   if (!profilePic || !profilePic.uri) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Profile picture data is required' 
-    });
+    return res.status(400).json({ success: false, message: 'Profile picture data is required' });
   }
 
   try {
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { profilePic },
-      { new: true }
-    );
-    
+    const user = await User.findByIdAndUpdate(userId, { profilePic }, { new: true });
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
-    
-    res.json({ 
-      success: true, 
-      message: 'Profile picture updated successfully', 
-      user 
-    });
+    res.json({ success: true, message: 'Profile picture updated successfully', user });
   } catch (err) {
     console.error('Profile picture update error:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error during profile picture update' 
-    });
+    res.status(500).json({ success: false, message: 'Server error during profile picture update' });
   }
 });
 
-// Update user info
+// ===== Update user info =====
 router.put('/:id', async (req, res) => {
   const userId = req.params.id;
   const updates = req.body;
