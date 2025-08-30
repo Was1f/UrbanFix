@@ -44,7 +44,6 @@
     "react-native-screens": "~4.11.1",
     "react-native-web": "~0.20.0",
     "react-native-webview": "^13.16.0"
-    "expo-document-picker": "~13.1.6"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
