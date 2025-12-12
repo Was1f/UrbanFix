@@ -190,7 +190,7 @@ router.patch('/:id/profile-pic', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const userId = req.params.id;
   const updates = req.body;
-  //ok
+  //ok a
   try {
     const updatedUser = await User.findByIdAndUpdate(userId, updates, { new: true });
     if (!updatedUser) return res.status(404).json({ message: 'User not found' });
